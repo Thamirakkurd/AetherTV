@@ -375,7 +375,7 @@ fun SettingsScreen(
                                 color = MatteGlassTokens.CharcoalPrimary
                             )
                             Text(
-                                text = "AetherTV v3.2.0 • github.com/Thamirakkurd",
+                                text = "AetherTV v3.3.0 • github.com/Thamirakkurd",
                                 fontSize = 12.sp,
                                 color = MatteGlassTokens.CharcoalMuted,
                                 maxLines = 1,
