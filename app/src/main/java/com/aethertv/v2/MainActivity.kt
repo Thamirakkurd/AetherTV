@@ -15,7 +15,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
@@ -26,15 +28,23 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.aethertv.v2.data.CategoryItem
 import com.aethertv.v2.data.ContentType
+import com.aethertv.v2.data.DownloadMode
 import com.aethertv.v2.data.EpisodeItem
 import com.aethertv.v2.data.MediaDetailInfo
+import com.aethertv.v2.data.MediaDownloadHelper
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.data.PlaylistDiskCache
+import com.aethertv.v2.data.SavedServer
+import com.aethertv.v2.data.ServerStore
 import com.aethertv.v2.data.XtreamClient
 import com.aethertv.v2.ui.components.AddPlaylistDialog
 import com.aethertv.v2.ui.components.FloatingGlassNavBar
@@ -51,6 +61,8 @@ import com.aethertv.v2.ui.theme.MatteGlassTokens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     private val isInPipModeState = mutableStateOf(false)
@@ -128,17 +140,59 @@ private fun AetherV2App(
     var isLoading by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
-    var playlistMode by remember { mutableStateOf(prefs.getString("mode", "") ?: "") }
-    var xtreamHost by remember { mutableStateOf(prefs.getString("host", "") ?: "") }
-    var xtreamUser by remember { mutableStateOf(prefs.getString("user", "") ?: "") }
-    var xtreamPass by remember { mutableStateOf(prefs.getString("pass", "") ?: "") }
-    var m3uUrl by remember { mutableStateOf(prefs.getString("m3u_url", "") ?: "") }
-
-    val playlistScopeKey = remember(playlistMode, xtreamHost, xtreamUser, m3uUrl) {
-        if (playlistMode == "xtream") "xtream_${xtreamHost}_${xtreamUser}"
-        else if (playlistMode == "m3u") "m3u_${m3uUrl}"
-        else "none"
+    // Migrate legacy single server into SavedServer list if needed
+    val initialServers = remember {
+        val saved = ServerStore.decode(prefs.getString("servers_json", null))
+        if (saved.isNotEmpty()) {
+            saved
+        } else {
+            val legacyMode = prefs.getString("mode", "") ?: ""
+            if (legacyMode == "xtream") {
+                val h = prefs.getString("host", "") ?: ""
+                val u = prefs.getString("user", "") ?: ""
+                val p = prefs.getString("pass", "") ?: ""
+                if (h.isNotBlank()) listOf(SavedServer("default_1", "Default Server", "xtream", h, u, p)) else emptyList()
+            } else if (legacyMode == "m3u") {
+                val m = prefs.getString("m3u_url", "") ?: ""
+                if (m.isNotBlank()) listOf(SavedServer("default_1", "Default M3U", "m3u", m3uUrl = m)) else emptyList()
+            } else {
+                emptyList()
+            }
+        }
     }
+
+    var servers by remember { mutableStateOf(initialServers) }
+    var activeServerId by remember {
+        mutableStateOf(
+            prefs.getString("active_server_id", null)
+                ?: initialServers.firstOrNull()?.id
+                ?: ""
+        )
+    }
+
+    val activeServer = remember(servers, activeServerId) {
+        servers.firstOrNull { it.id == activeServerId } ?: servers.firstOrNull()
+    }
+
+    val playlistMode = activeServer?.mode ?: ""
+    val xtreamHost = activeServer?.host ?: ""
+    val xtreamUser = activeServer?.user ?: ""
+    val xtreamPass = activeServer?.pass ?: ""
+    val m3uUrl = activeServer?.m3uUrl ?: ""
+    val playlistScopeKey = activeServer?.id ?: "none"
+
+    // Download mode & offline files
+    var downloadMode by remember {
+        val savedName = prefs.getString("download_mode", DownloadMode.ASK.name) ?: DownloadMode.ASK.name
+        mutableStateOf(
+            try { DownloadMode.valueOf(savedName) } catch (_: Exception) { DownloadMode.ASK }
+        )
+    }
+    var pendingDownloadTarget by remember { mutableStateOf<Pair<String, String>?>(null) } // url to title
+    var downloadedFiles by remember { mutableStateOf(MediaDownloadHelper.listDownloadedFiles()) }
+
+    // Confirmation prompt for "All" category
+    var confirmAllTab by remember { mutableStateOf<Int?>(null) } // 1=Live, 2=Movies, 3=Series
 
     // Catalog state + in-memory cache for "All"
     var liveCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
@@ -162,7 +216,7 @@ private fun AetherV2App(
     var recents by remember { mutableStateOf(XtreamClient.decodeItems(prefs.getString("recents_json", null))) }
     val favoriteIds = remember(favorites) { favorites.map { it.id }.toSet() }
 
-    // Media Detail (Info Page) & Built-in Player state
+    // Media Detail & Built-in Player state
     var selectedDetailItem by remember { mutableStateOf<MediaItem?>(null) }
     var detailInfo by remember { mutableStateOf(MediaDetailInfo()) }
     var detailEpisodes by remember { mutableStateOf<List<EpisodeItem>>(emptyList()) }
@@ -174,6 +228,30 @@ private fun AetherV2App(
             activePlayerItem = null
         } else {
             selectedDetailItem = null
+        }
+    }
+
+    fun persistServers(updated: List<SavedServer>, newActiveId: String) {
+        servers = updated
+        activeServerId = newActiveId
+        prefs.edit()
+            .putString("servers_json", ServerStore.encode(updated))
+            .putString("active_server_id", newActiveId)
+            .apply()
+    }
+
+    fun triggerDownload(url: String, title: String) {
+        when (downloadMode) {
+            DownloadMode.BUILTIN -> {
+                MediaDownloadHelper.startBuiltInDownload(context, url, title)
+                downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
+            }
+            DownloadMode.EXTERNAL -> {
+                MediaDownloadHelper.startExternalDownload(context, url, title)
+            }
+            DownloadMode.ASK -> {
+                pendingDownloadTarget = url to title
+            }
         }
     }
 
@@ -558,14 +636,7 @@ private fun AetherV2App(
         }
     }
 
-    fun connectXtream(rawHost: String, rawUser: String, rawPass: String, forceRefresh: Boolean = true) {
-        val base = XtreamClient.normalizeHost(rawHost)
-        val u = rawUser.trim()
-        val p = rawPass.trim()
-        playlistMode = "xtream"
-        xtreamHost = base
-        xtreamUser = u
-        xtreamPass = p
+    fun resetActiveState() {
         liveCategories = emptyList()
         vodCategories = emptyList()
         seriesCategories = emptyList()
@@ -575,28 +646,13 @@ private fun AetherV2App(
         allLiveCache = emptyList()
         allVodCache = emptyList()
         allSeriesCache = emptyList()
-        prefs.edit()
-            .putString("mode", "xtream")
-            .putString("host", base)
-            .putString("user", u)
-            .putString("pass", p)
-            .apply()
-        scope.launch {
-            if (forceRefresh) PlaylistDiskCache.clearAll(context)
-            ensureLiveCategories(forceNetwork = forceRefresh)
-        }
+        m3uAllItems = emptyList()
     }
 
-    fun connectM3u(url: String, forceRefresh: Boolean = true) {
-        val cleanUrl = url.trim()
-        playlistMode = "m3u"
-        m3uUrl = cleanUrl
-        prefs.edit().putString("mode", "m3u").putString("m3u_url", cleanUrl).apply()
-        val m3uCacheKey = "m3u_${cleanUrl}_all"
+    fun loadM3uForServer(srv: SavedServer, forceRefresh: Boolean) {
+        val m3uCacheKey = "${srv.id}_m3u_all"
         scope.launch {
-            if (forceRefresh) {
-                PlaylistDiskCache.clearAll(context)
-            } else {
+            if (!forceRefresh) {
                 val cached = PlaylistDiskCache.loadItems(context, m3uCacheKey)
                 if (cached.isNotEmpty()) {
                     m3uAllItems = cached
@@ -610,9 +666,9 @@ private fun AetherV2App(
                 }
             }
             isLoading = true
-            statusMessage = "Loading M3U playlist..."
+            statusMessage = "Loading ${srv.name}..."
             try {
-                val body = XtreamClient.fetchText(cleanUrl)
+                val body = XtreamClient.fetchText(srv.m3uUrl)
                 val parsed = withContext(Dispatchers.Default) { XtreamClient.parseM3u(body) }
                 m3uAllItems = parsed
                 PlaylistDiskCache.saveItems(context, m3uCacheKey, parsed)
@@ -629,11 +685,13 @@ private fun AetherV2App(
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (playlistMode == "xtream" && xtreamHost.isNotBlank() && xtreamUser.isNotBlank() && xtreamPass.isNotBlank()) {
+    LaunchedEffect(activeServerId) {
+        resetActiveState()
+        val srv = activeServer ?: return@LaunchedEffect
+        if (srv.mode == "xtream" && srv.host.isNotBlank()) {
             ensureLiveCategories(forceNetwork = false)
-        } else if (playlistMode == "m3u" && m3uUrl.isNotBlank()) {
-            connectM3u(m3uUrl, forceRefresh = false)
+        } else if (srv.mode == "m3u" && srv.m3uUrl.isNotBlank()) {
+            loadM3uForServer(srv, forceRefresh = false)
         }
     }
 
@@ -667,6 +725,7 @@ private fun AetherV2App(
                 onBack = { selectedDetailItem = null },
                 onToggleFavorite = { toggleFavorite(activeDetail) },
                 onWatchNow = { playItem(activeDetail) },
+                onDownloadItem = { triggerDownload(activeDetail.streamUrl, activeDetail.name) },
                 onEpisodeClick = { ep ->
                     val epMedia = MediaItem(
                         id = "ep_${ep.id}",
@@ -678,18 +737,42 @@ private fun AetherV2App(
                         badge = ep.season
                     )
                     playItem(epMedia)
+                },
+                onDownloadEpisode = { ep ->
+                    triggerDownload(ep.streamUrl, "${activeDetail.name} - ${ep.title}")
                 }
             )
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
+                val activeTabCategories = remember(selectedTab, liveCategories, vodCategories, seriesCategories) {
+                    when (selectedTab) {
+                        1 -> listOf("All", "Favorites") + liveCategories.map { it.name }
+                        2 -> listOf("All", "Favorites") + vodCategories.map { it.name }
+                        3 -> listOf("All", "Favorites") + seriesCategories.map { it.name }
+                        else -> emptyList()
+                    }
+                }
+                val activeTabSelectedCat = when (selectedTab) {
+                    1 -> selectedLiveCat
+                    2 -> selectedVodCat
+                    3 -> selectedSeriesCat
+                    else -> ""
+                }
+
                 GlassTopHeader(
                     title = tabs[selectedTab].label,
-                    onSearchClick = { showSearch = !showSearch },
-                    onFilterClick = {
-                        if (selectedTab == 1) ensureLiveCategories(forceNetwork = false)
-                        if (selectedTab == 2) ensureVodCategories(forceNetwork = false)
-                        if (selectedTab == 3) ensureSeriesCategories(forceNetwork = false)
+                    categories = activeTabCategories,
+                    selectedCategory = activeTabSelectedCat,
+                    onSelectCategory = { cat ->
+                        if (cat == "All") {
+                            confirmAllTab = selectedTab
+                        } else {
+                            if (selectedTab == 1) loadLiveCategory(cat, forceNetwork = false)
+                            if (selectedTab == 2) loadVodCategory(cat, forceNetwork = false)
+                            if (selectedTab == 3) loadSeriesCategory(cat, forceNetwork = false)
+                        }
                     },
+                    onSearchClick = { showSearch = !showSearch },
                     onAddClick = { showAddDialog = true }
                 )
 
@@ -749,8 +832,11 @@ private fun AetherV2App(
                             selectedCategory = selectedLiveCat,
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
-                            emptyMessage = if (playlistMode.isBlank()) "Tap + to add your playlist" else "No live channels in this category",
-                            onSelectCategory = { loadLiveCategory(it, forceNetwork = false) },
+                            emptyMessage = if (playlistMode.isBlank()) "Tap + to add your server" else "No live channels in this category",
+                            onSelectCategory = { cat ->
+                                if (cat == "All") confirmAllTab = 1
+                                else loadLiveCategory(cat, forceNetwork = false)
+                            },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
                             onPlayClick = { playItem(it) }
@@ -775,8 +861,11 @@ private fun AetherV2App(
                             selectedCategory = selectedVodCat,
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
-                            emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes playlist for Movies" else "No movies in this category",
-                            onSelectCategory = { loadVodCategory(it, forceNetwork = false) },
+                            emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes server for Movies" else "No movies in this category",
+                            onSelectCategory = { cat ->
+                                if (cat == "All") confirmAllTab = 2
+                                else loadVodCategory(cat, forceNetwork = false)
+                            },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
                             onPlayClick = { playItem(it) }
@@ -801,48 +890,66 @@ private fun AetherV2App(
                             selectedCategory = selectedSeriesCat,
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
-                            emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes playlist for Series" else "No series in this category",
-                            onSelectCategory = { loadSeriesCategory(it, forceNetwork = false) },
+                            emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes server for Series" else "No series in this category",
+                            onSelectCategory = { cat ->
+                                if (cat == "All") confirmAllTab = 3
+                                else loadSeriesCategory(cat, forceNetwork = false)
+                            },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
                             onPlayClick = { openDetail(it) }
                         )
                     }
                     4 -> {
-                        val label = when (playlistMode) {
-                            "xtream" -> xtreamHost
-                            "m3u" -> m3uUrl
-                            else -> "No playlist configured"
-                        }
                         SettingsScreen(
-                            playlistLabel = label,
+                            servers = servers,
+                            activeServerId = activeServerId,
+                            downloadMode = downloadMode,
+                            downloadedFiles = downloadedFiles,
                             favoritesCount = favorites.size,
                             recentCount = recents.size,
+                            onSelectServer = { srv ->
+                                persistServers(servers, srv.id)
+                            },
+                            onDeleteServer = { srv ->
+                                val remaining = servers.filterNot { it.id == srv.id }
+                                val nextId = if (srv.id == activeServerId) remaining.firstOrNull()?.id ?: "" else activeServerId
+                                persistServers(remaining, nextId)
+                            },
+                            onAddServerClick = { showAddDialog = true },
                             onRefreshPlaylist = {
-                                if (playlistMode == "xtream" && xtreamHost.isNotBlank()) {
-                                    connectXtream(xtreamHost, xtreamUser, xtreamPass, forceRefresh = true)
-                                } else if (playlistMode == "m3u" && m3uUrl.isNotBlank()) {
-                                    connectM3u(m3uUrl, forceRefresh = true)
+                                val srv = activeServer ?: return@SettingsScreen
+                                scope.launch {
+                                    PlaylistDiskCache.clearAll(context)
+                                    resetActiveState()
+                                    if (srv.mode == "xtream") ensureLiveCategories(forceNetwork = true)
+                                    else loadM3uForServer(srv, forceRefresh = true)
                                 }
                             },
-                            onAddOrChangePlaylist = { showAddDialog = true },
+                            onChangeDownloadMode = { mode ->
+                                downloadMode = mode
+                                prefs.edit().putString("download_mode", mode.name).apply()
+                            },
+                            onPlayDownloadedFile = { file ->
+                                val offlineItem = MediaItem(
+                                    id = "offline_${file.name}",
+                                    name = file.nameWithoutExtension,
+                                    group = "Downloaded",
+                                    posterUrl = null,
+                                    streamUrl = Uri.fromFile(file).toString(),
+                                    contentType = ContentType.MOVIE
+                                )
+                                playItem(offlineItem)
+                            },
+                            onDeleteDownloadedFile = { file ->
+                                file.delete()
+                                downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
+                            },
                             onClearAll = {
                                 prefs.edit().clear().apply()
-                                playlistMode = ""
-                                xtreamHost = ""
-                                xtreamUser = ""
-                                xtreamPass = ""
-                                m3uUrl = ""
-                                liveCategories = emptyList()
-                                vodCategories = emptyList()
-                                seriesCategories = emptyList()
-                                liveItems = emptyList()
-                                vodItems = emptyList()
-                                seriesItems = emptyList()
-                                allLiveCache = emptyList()
-                                allVodCache = emptyList()
-                                allSeriesCache = emptyList()
-                                m3uAllItems = emptyList()
+                                servers = emptyList()
+                                activeServerId = ""
+                                resetActiveState()
                                 favorites = emptyList()
                                 recents = emptyList()
                                 scope.launch { PlaylistDiskCache.clearAll(context) }
@@ -864,25 +971,152 @@ private fun AetherV2App(
                 if (idx == 1) ensureLiveCategories(forceNetwork = false)
                 if (idx == 2) ensureVodCategories(forceNetwork = false)
                 if (idx == 3) ensureSeriesCategories(forceNetwork = false)
+                if (idx == 4) downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
             },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
     }
 
+    // Confirmation Prompt when tapping "All"
+    confirmAllTab?.let { targetTab ->
+        Dialog(onDismissRequest = { confirmAllTab = null }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Color.White)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "Update All List?",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MatteGlassTokens.CharcoalPrimary
+                )
+                Text(
+                    text = "Do you want to update and reload everything from the server, or use your saved cache?",
+                    fontSize = 13.sp,
+                    color = MatteGlassTokens.CharcoalSecondary
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MatteGlassTokens.CanvasWhite)
+                            .clickable {
+                                confirmAllTab = null
+                                if (targetTab == 1) loadLiveCategory("All", forceNetwork = false)
+                                if (targetTab == 2) loadVodCategory("All", forceNetwork = false)
+                                if (targetTab == 3) loadSeriesCategory("All", forceNetwork = false)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        Text("No (Use Cache)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MatteGlassTokens.CharcoalPrimary)
+                            .clickable {
+                                confirmAllTab = null
+                                if (targetTab == 1) loadLiveCategory("All", forceNetwork = true)
+                                if (targetTab == 2) loadVodCategory("All", forceNetwork = true)
+                                if (targetTab == 3) loadSeriesCategory("All", forceNetwork = true)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        Text("Yes (Update)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+
+    // Downloader Choice Prompt when mode is "Ask every time"
+    pendingDownloadTarget?.let { (dlUrl, dlTitle) ->
+        Dialog(onDismissRequest = { pendingDownloadTarget = null }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Color.White)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Download Video",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MatteGlassTokens.CharcoalPrimary
+                )
+                Text(
+                    text = dlTitle,
+                    fontSize = 13.sp,
+                    color = MatteGlassTokens.CharcoalSecondary
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MatteGlassTokens.CharcoalPrimary)
+                        .clickable {
+                            pendingDownloadTarget = null
+                            MediaDownloadHelper.startBuiltInDownload(context, dlUrl, dlTitle)
+                            downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
+                        }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Built-in Downloader", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MatteGlassTokens.CanvasWhite)
+                        .clickable {
+                            pendingDownloadTarget = null
+                            MediaDownloadHelper.startExternalDownload(context, dlUrl, dlTitle)
+                        }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("External App (1DM+ / ADM)", color = MatteGlassTokens.CharcoalPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                }
+            }
+        }
+    }
+
     if (showAddDialog) {
         AddPlaylistDialog(
-            initialHost = xtreamHost,
-            initialUser = xtreamUser,
-            initialPass = xtreamPass,
-            initialM3u = m3uUrl,
             onDismiss = { showAddDialog = false },
-            onLoadXtream = { h, u, p ->
+            onLoadXtream = { name, h, u, p ->
                 showAddDialog = false
-                connectXtream(h, u, p, forceRefresh = true)
+                val newSrv = SavedServer(
+                    id = UUID.randomUUID().toString(),
+                    name = name,
+                    mode = "xtream",
+                    host = XtreamClient.normalizeHost(h),
+                    user = u.trim(),
+                    pass = p.trim()
+                )
+                persistServers(servers + newSrv, newSrv.id)
             },
-            onLoadM3u = { url ->
+            onLoadM3u = { name, url ->
                 showAddDialog = false
-                connectM3u(url, forceRefresh = true)
+                val newSrv = SavedServer(
+                    id = UUID.randomUUID().toString(),
+                    name = name,
+                    mode = "m3u",
+                    m3uUrl = url.trim()
+                )
+                persistServers(servers + newSrv, newSrv.id)
             }
         )
     }
