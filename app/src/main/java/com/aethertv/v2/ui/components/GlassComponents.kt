@@ -62,13 +62,10 @@ data class NavTabItem(
 )
 
 private val NavFieldShape = RoundedCornerShape(18.dp)
-private val CardShape = RoundedCornerShape(10.dp)
+private val CardShape = RoundedCornerShape(4.dp)
 private val CardBgBrush = Brush.verticalGradient(listOf(Color(0xFF232833), Color(0xFF11141B)))
 private val CardScrimBrush = Brush.verticalGradient(
     colors = listOf(Color.Transparent, Color(0x88090B10), Color(0xEB07090D))
-)
-private val CardTopSheenBrush = Brush.verticalGradient(
-    colors = listOf(Color.White.copy(alpha = 0.24f), Color.Transparent)
 )
 private val CardIconBorder = BorderStroke(0.9.dp, Color.White.copy(alpha = 0.36f))
 
@@ -515,7 +512,6 @@ fun PosterMediaCard(
             }
             .clip(CardShape)
             .background(CardBgBrush)
-            .border(BorderStroke(1.dp, MatteGlassTokens.CardRimBrush), CardShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -530,15 +526,6 @@ fun PosterMediaCard(
                 modifier = Modifier.fillMaxSize()
             )
         }
-
-        // Subtle Liquid Glass top specular reflection
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(48.dp)
-                .background(CardTopSheenBrush)
-        )
 
         // Bottom frosted readability scrim
         Box(
@@ -606,26 +593,15 @@ fun PosterMediaCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (badgeText.isNotBlank()) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0x6612151C))
-                            .border(0.75.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 7.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = badgeText,
-                            fontSize = if (isLarge) 11.sp else 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White.copy(alpha = 0.94f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                } else {
-                    Spacer(Modifier.width(4.dp))
-                }
+                Text(
+                    text = badgeText,
+                    fontSize = if (isLarge) 12.sp else 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White.copy(alpha = 0.94f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
                 CardGlassCircleIcon(
                     icon = Icons.Default.PlayArrow,
                     contentDescription = "Play",

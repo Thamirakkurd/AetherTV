@@ -3,11 +3,13 @@ package com.aethertv.v2.ui.screens
 import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.media.AudioManager
 import android.net.Uri
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.LayoutInflater
+import android.view.OrientationEventListener
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -77,12 +79,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -143,12 +147,18 @@ private val YouTubeRed = Color(0xFFFF0033)
 
 private val LightPlayerAmbientBg = Brush.verticalGradient(
     colorStops = arrayOf(
-        0.00f to Color(0xFF14171D),
-        0.16f to Color(0xFF282D37),
-        0.32f to Color(0xFFDDE2EA),
-        0.55f to Color(0xFFF1F3F6),
-        1.00f to Color(0xFFF8F9FB)
+        0.00f to Color(0xFF10131A),
+        0.15f to Color(0xFF1E2430),
+        0.26f to Color(0xFFC9D2DF),
+        0.44f to Color(0xFFEEF2F7),
+        1.00f to Color(0xFFF8F9FC)
     )
+)
+
+private val HeaderTextShadow = Shadow(
+    color = Color.Black.copy(alpha = 0.58f),
+    offset = Offset(0f, 1.5f),
+    blurRadius = 5f
 )
 
 private val DarkPlayerAmbientBg = Brush.verticalGradient(
@@ -303,9 +313,70 @@ fun UnifiedMorphPlayerOverlay(
     var isPlaying by remember { mutableStateOf(true) }
     var isBuffering by remember { mutableStateOf(true) }
     var errorText by remember { mutableStateOf<String?>(null) }
+    val configuration = LocalConfiguration.current
+    val isLandscapeConfig = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     var controlsVisible by remember { mutableStateOf(true) }
-    var isFullscreen by remember { mutableStateOf(false) }
+    var isFullscreen by remember { mutableStateOf(isLandscapeConfig && !isMiniPlayer) }
+    var manualOrientationLock by remember { mutableStateOf<Int?>(null) }
     var resizeModeIndex by remember { mutableIntStateOf(0) }
+
+    val effectiveFullscreen = !isMiniPlayer && (isFullscreen || isLandscapeConfig)
+
+    fun enterFullscreen() {
+        isFullscreen = true
+        manualOrientationLock = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    }
+
+    fun exitFullscreen() {
+        isFullscreen = false
+        val autoRotateOn = try {
+            Settings.System.getInt(context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
+        } catch (_: Exception) { false }
+        if (isLandscapeConfig && autoRotateOn) {
+            manualOrientationLock = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            manualOrientationLock = null
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    LaunchedEffect(isLandscapeConfig, isMiniPlayer) {
+        if (!isMiniPlayer) {
+            isFullscreen = isLandscapeConfig
+        } else {
+            isFullscreen = false
+            manualOrientationLock = null
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    DisposableEffect(context, activity) {
+        val listener = object : OrientationEventListener(context) {
+            override fun onOrientationChanged(angle: Int) {
+                if (angle == ORIENTATION_UNKNOWN) return
+                val lock = manualOrientationLock ?: return
+                val autoRotateOn = try {
+                    Settings.System.getInt(context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
+                } catch (_: Exception) { false }
+                if (!autoRotateOn) return
+
+                val physicallyPortrait = angle <= 35 || angle >= 325
+                val physicallyLandscape = (angle in 55..125) || (angle in 235..305)
+                if (lock == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT && physicallyPortrait) {
+                    manualOrientationLock = null
+                    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                } else if (lock == ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE && physicallyLandscape) {
+                    manualOrientationLock = null
+                    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
+            }
+        }
+        if (listener.canDetectOrientation()) listener.enable()
+        onDispose { listener.disable() }
+    }
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
 
     var currentPosMs by remember { mutableLongStateOf(0L) }
@@ -320,6 +391,7 @@ fun UnifiedMorphPlayerOverlay(
     var showSubtitleSheet by remember { mutableStateOf(false) }
     var showPlayerSettingsSheet by remember { mutableStateOf(false) }
     var showCategorySheet by remember { mutableStateOf(false) }
+    var showDescriptionSheet by remember { mutableStateOf(false) }
 
     // Tracks & Subtitles
     var embeddedTextGroups by remember { mutableStateOf<List<Tracks.Group>>(emptyList()) }
@@ -351,7 +423,7 @@ fun UnifiedMorphPlayerOverlay(
         }
     }
 
-    ImmersiveFullscreenEffect(enabled = isFullscreen && !isMiniPlayer && !isInPipMode)
+    ImmersiveFullscreenEffect(enabled = effectiveFullscreen && !isInPipMode)
 
     val resizeModes = remember {
         listOf(
@@ -367,7 +439,7 @@ fun UnifiedMorphPlayerOverlay(
     // Smoothly sync expandAnim with isMiniPlayer state changes (taps, back button, new item)
     LaunchedEffect(isMiniPlayer) {
         val target = if (isMiniPlayer) 0f else 1f
-        if (isMiniPlayer && isFullscreen) isFullscreen = false
+        if (isMiniPlayer && effectiveFullscreen) exitFullscreen()
         expandAnim.animateTo(
             targetValue = target,
             animationSpec = spring(dampingRatio = 0.86f, stiffness = 380f)
@@ -521,13 +593,7 @@ fun UnifiedMorphPlayerOverlay(
         }
     }
 
-    LaunchedEffect(isFullscreen, isMiniPlayer) {
-        activity?.requestedOrientation = if (isFullscreen && !isMiniPlayer) {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-    }
+
 
     LaunchedEffect(exoPlayer, isLive) {
         while (true) {
@@ -604,13 +670,13 @@ fun UnifiedMorphPlayerOverlay(
         ).joinToString(" • ")
     }
 
-    BackHandler(enabled = !isMiniPlayer && isFullscreen) {
-        isFullscreen = false
+    BackHandler(enabled = effectiveFullscreen) {
+        exitFullscreen()
     }
 
     // Updated refs so active pointer gestures never cancel mid-drag
     val isLiveState by rememberUpdatedState(isLive)
-    val isFullscreenState by rememberUpdatedState(isFullscreen)
+    val isFullscreenState by rememberUpdatedState(effectiveFullscreen)
     val onToggleMinimizeState by rememberUpdatedState(onToggleMinimize)
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -624,7 +690,7 @@ fun UnifiedMorphPlayerOverlay(
             label = "miniDockBottom"
         )
 
-        val p = if (isFullscreen || isInPipMode) 1f else expandAnim.value.coerceIn(0f, 1f)
+        val p = if (effectiveFullscreen || isInPipMode) 1f else expandAnim.value.coerceIn(0f, 1f)
         val expandedVideoH = screenW * (9f / 16f)
         val miniH = 64.dp
         val miniW = 114.dp
@@ -632,11 +698,11 @@ fun UnifiedMorphPlayerOverlay(
         val miniTopY = (screenH - animatedMiniBottom - miniH).coerceAtLeast(statusBarTop)
         val dragSpanPx = with(density) { (miniTopY - statusBarTop).toPx().coerceAtLeast(260f) }
 
-        val videoX: Dp = if (isFullscreen || isInPipMode) 0.dp else lerp(miniMarginX, 0.dp, p)
-        val videoY: Dp = if (isFullscreen || isInPipMode) 0.dp else lerp(miniTopY, statusBarTop, p)
-        val videoW: Dp = if (isFullscreen || isInPipMode) screenW else lerp(miniW, screenW, p)
-        val videoH: Dp = if (isFullscreen || isInPipMode) screenH else lerp(miniH, expandedVideoH, p)
-        val videoCorner: Dp = if (isFullscreen || isInPipMode) 0.dp else lerp(12.dp, 0.dp, p)
+        val videoX: Dp = if (effectiveFullscreen || isInPipMode) 0.dp else lerp(miniMarginX, 0.dp, p)
+        val videoY: Dp = if (effectiveFullscreen || isInPipMode) 0.dp else lerp(miniTopY, statusBarTop, p)
+        val videoW: Dp = if (effectiveFullscreen || isInPipMode) screenW else lerp(miniW, screenW, p)
+        val videoH: Dp = if (effectiveFullscreen || isInPipMode) screenH else lerp(miniH, expandedVideoH, p)
+        val videoCorner: Dp = if (effectiveFullscreen || isInPipMode) 0.dp else lerp(12.dp, 0.dp, p)
 
         val feedAlpha = ((p - 0.12f) / 0.88f).coerceIn(0f, 1f)
         val miniChromeAlpha = ((1f - p) / 0.50f).coerceIn(0f, 1f)
@@ -644,7 +710,7 @@ fun UnifiedMorphPlayerOverlay(
         val ambientBg = if (MatteGlassTokens.isDark) DarkPlayerAmbientBg else LightPlayerAmbientBg
 
         // LAYER 1: Portrait Ambient Backdrop + Status Bar Cap + Below-Video Content Sheet
-        if (!isFullscreen && !isInPipMode && p > 0.02f) {
+        if (!effectiveFullscreen && !isInPipMode && p > 0.02f) {
             // Status bar dark backdrop
             Box(
                 modifier = Modifier
@@ -677,12 +743,13 @@ fun UnifiedMorphPlayerOverlay(
                         navBottom = navBottom,
                         onSelectCategory = onSelectLiveCategory,
                         onOpenCategorySheet = { showCategorySheet = true },
+                        onOpenDescription = { showDescriptionSheet = true },
                         onSwitchChannel = onSwitchItem,
                         onToggleFavorite = { onToggleFavorite(item) },
                         onOpenExternal = { onOpenExternal(item) },
                         onEnterPip = onEnterPip,
                         onOpenSubtitles = { showSubtitleSheet = true },
-                        onEnterFullscreen = { isFullscreen = true },
+                        onEnterFullscreen = { enterFullscreen() },
                         onMoreClick = onMoreClick
                     )
                 } else {
@@ -695,11 +762,12 @@ fun UnifiedMorphPlayerOverlay(
                         isFavorite = favoriteIds.contains(item.id),
                         navBottom = navBottom,
                         onToggleFavorite = { onToggleFavorite(item) },
+                        onOpenDescription = { showDescriptionSheet = true },
                         onDownload = { onDownloadItem(item.streamUrl, item.name) },
                         onOpenExternal = { onOpenExternal(item) },
                         onEnterPip = onEnterPip,
                         onOpenSubtitles = { showSubtitleSheet = true },
-                        onEnterFullscreen = { isFullscreen = true },
+                        onEnterFullscreen = { enterFullscreen() },
                         onPlayEpisode = onPlayEpisode,
                         onDownloadEpisode = { ep -> onDownloadItem(ep.streamUrl, "${item.name} - ${ep.title}") },
                         onSelectRelated = onSwitchItem
@@ -709,7 +777,7 @@ fun UnifiedMorphPlayerOverlay(
         }
 
         // LAYER 2: Docked Mini-Player Liquid Glass Bar + Right Controls
-        if (!isFullscreen && !isInPipMode && p < 0.88f) {
+        if (!effectiveFullscreen && !isInPipMode && p < 0.88f) {
             val dockW = lerp(screenW - miniMarginX * 2, screenW, p)
             val dockX = lerp(miniMarginX, 0.dp, p)
             val dockShape = RoundedCornerShape(lerp(12.dp, 0.dp, p))
@@ -818,13 +886,13 @@ fun UnifiedMorphPlayerOverlay(
                 },
                 update = { view ->
                     if (view.player !== exoPlayer) view.player = exoPlayer
-                    view.resizeMode = if (p < 0.25f && !isFullscreen && !isInPipMode) {
+                    view.resizeMode = if (p < 0.25f && !effectiveFullscreen && !isInPipMode) {
                         AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     } else {
                         resizeModes[resizeModeIndex].first
                     }
                     view.subtitleView?.alpha = if (useEmbeddedDelayOverlay) 0f else 1f
-                    val baseSp = if (isFullscreen) 18f else 14f
+                    val baseSp = if (effectiveFullscreen) 18f else 14f
                     view.subtitleView?.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, baseSp * subtitleFontScale)
                 },
                 onRelease = { it.player = null },
@@ -844,7 +912,7 @@ fun UnifiedMorphPlayerOverlay(
                     Text(
                         text = delayedEmbeddedText,
                         color = Color.White,
-                        fontSize = ((if (isFullscreen) 17f else 13f) * subtitleFontScale).sp,
+                        fontSize = ((if (effectiveFullscreen) 17f else 13f) * subtitleFontScale).sp,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -854,7 +922,7 @@ fun UnifiedMorphPlayerOverlay(
                 CircularProgressIndicator(
                     color = Color.White,
                     strokeWidth = 2.6.dp,
-                    modifier = Modifier.size(if (isFullscreen) 40.dp else 32.dp).align(Alignment.Center)
+                    modifier = Modifier.size(if (effectiveFullscreen) 40.dp else 32.dp).align(Alignment.Center)
                 )
             }
 
@@ -896,7 +964,7 @@ fun UnifiedMorphPlayerOverlay(
 
             // Brightness / Volume Gesture HUD Pill
             androidx.compose.animation.AnimatedVisibility(
-                visible = activeHud != null && isFullscreen && !isInPipMode,
+                visible = activeHud != null && effectiveFullscreen && !isInPipMode,
                 enter = fadeIn(tween(120)),
                 exit = fadeOut(tween(220)),
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 30.dp)
@@ -905,7 +973,7 @@ fun UnifiedMorphPlayerOverlay(
             }
 
             // Thin red progress/live bar when controls are hidden in portrait
-            if (!controlsVisible && !isFullscreen && !isInPipMode && p > 0.85f) {
+            if (!controlsVisible && !effectiveFullscreen && !isInPipMode && p > 0.85f) {
                 val frac = if (isLive) 1f else if (durationMs > 0L) (currentPosMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
                 Box(
                     modifier = Modifier
@@ -926,7 +994,7 @@ fun UnifiedMorphPlayerOverlay(
 
         // LAYER 4: FIXED-POSITION GESTURE CATCHER (NEVER MOVES MID-DRAG -> BUTTER-SMOOTH 1:1 TRACKING!)
         if (!isInPipMode) {
-            if (isFullscreen) {
+            if (effectiveFullscreen) {
                 // Fullscreen 3-Zone Gesture Layer: Left=Brightness, Middle-Down=Exit Fullscreen, Right=Volume
                 Box(
                     modifier = Modifier
@@ -986,7 +1054,7 @@ fun UnifiedMorphPlayerOverlay(
                                 },
                                 onDragEnd = {
                                     if (zone == 1 && middleDragDown > 92f) {
-                                        isFullscreen = false
+                                        exitFullscreen()
                                     }
                                     middleDragDown = 0f
                                 },
@@ -1055,7 +1123,7 @@ fun UnifiedMorphPlayerOverlay(
                                     val curP = expandAnim.value
                                     when {
                                         cumulativeY < -88f && curP > 0.95f -> {
-                                            isFullscreen = true
+                                            enterFullscreen()
                                         }
                                         curP < 0.68f || vy > 650f -> {
                                             onToggleMinimizeState(true)
@@ -1156,7 +1224,7 @@ fun UnifiedMorphPlayerOverlay(
         }
 
         // LAYER 5: YOUTUBE PLAYER OVERLAY CONTROLS (Exact Icons from Screenshot!)
-        val showControls = controlsVisible && !isInPipMode && (isFullscreen || (!isMiniPlayer && p > 0.92f))
+        val showControls = controlsVisible && !isInPipMode && (effectiveFullscreen || (!isMiniPlayer && p > 0.92f))
         androidx.compose.animation.AnimatedVisibility(
             visible = showControls,
             enter = fadeIn(tween(160)),
@@ -1175,8 +1243,8 @@ fun UnifiedMorphPlayerOverlay(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.62f), Color.Transparent)))
-                        .then(if (isFullscreen) Modifier.displayCutoutPadding() else Modifier)
-                        .padding(horizontal = if (isFullscreen) 16.dp else 8.dp, vertical = if (isFullscreen) 10.dp else 4.dp)
+                        .then(if (effectiveFullscreen) Modifier.displayCutoutPadding() else Modifier)
+                        .padding(horizontal = if (effectiveFullscreen) 16.dp else 8.dp, vertical = if (effectiveFullscreen) 10.dp else 4.dp)
                         .align(Alignment.TopCenter),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -1187,14 +1255,14 @@ fun UnifiedMorphPlayerOverlay(
                     ) {
                         YouTubeCleanIconBtn(
                             icon = Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = if (isFullscreen) "Exit Fullscreen" else "Minimize",
+                            contentDescription = if (effectiveFullscreen) "Exit Fullscreen" else "Minimize",
                             iconSize = 28.dp,
                             onClick = {
-                                if (isFullscreen) isFullscreen = false
+                                if (effectiveFullscreen) exitFullscreen()
                                 else onToggleMinimize(true)
                             }
                         )
-                        if (isFullscreen) {
+                        if (effectiveFullscreen) {
                             Spacer(Modifier.width(6.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
@@ -1246,7 +1314,7 @@ fun UnifiedMorphPlayerOverlay(
                 // Center Row: Prev / Large Clean Play-Pause / Next (matching YouTube screenshot)
                 Row(
                     modifier = Modifier.align(Alignment.Center),
-                    horizontalArrangement = Arrangement.spacedBy(if (isFullscreen) 48.dp else 36.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (effectiveFullscreen) 48.dp else 36.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val leftEnabled = when {
@@ -1318,7 +1386,7 @@ fun UnifiedMorphPlayerOverlay(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = if (isFullscreen) 18.dp else 12.dp, vertical = 2.dp),
+                            .padding(horizontal = if (effectiveFullscreen) 18.dp else 12.dp, vertical = 2.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1343,10 +1411,10 @@ fun UnifiedMorphPlayerOverlay(
                         }
 
                         YouTubeCleanIconBtn(
-                            icon = if (isFullscreen) Icons.Rounded.CloseFullscreen else Icons.Rounded.OpenInFull,
-                            contentDescription = if (isFullscreen) "Exit Fullscreen" else "Fullscreen",
+                            icon = if (effectiveFullscreen) Icons.Rounded.CloseFullscreen else Icons.Rounded.OpenInFull,
+                            contentDescription = if (effectiveFullscreen) "Exit Fullscreen" else "Fullscreen",
                             iconSize = 20.dp,
-                            onClick = { isFullscreen = !isFullscreen }
+                            onClick = { if (effectiveFullscreen) exitFullscreen() else enterFullscreen() }
                         )
                     }
 
@@ -1362,8 +1430,8 @@ fun UnifiedMorphPlayerOverlay(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(
-                                    horizontal = if (isFullscreen) 16.dp else 0.dp,
-                                    vertical = if (isFullscreen) 10.dp else 0.dp
+                                    horizontal = if (effectiveFullscreen) 16.dp else 0.dp,
+                                    vertical = if (effectiveFullscreen) 10.dp else 0.dp
                                 )
                         )
                     } else {
@@ -1377,6 +1445,21 @@ fun UnifiedMorphPlayerOverlay(
                 }
             }
         }
+    }
+
+    // YouTube-style Description Bottom Sheet (opened by tapping title / ...more)
+    if (showDescriptionSheet) {
+        MediaDescriptionSheet(
+            item = item,
+            isLive = isLive,
+            detailInfo = vodDetailInfo,
+            episodeCount = vodEpisodes.size,
+            videoResolution = videoResolution,
+            videoCodec = videoCodec,
+            audioInfo = audioInfo,
+            bitrateInfo = bitrateInfo,
+            onDismiss = { showDescriptionSheet = false }
+        )
     }
 
     // Category Switcher Bottom Sheet (Live TV)
@@ -1607,6 +1690,7 @@ private fun LiveFeedBelowPlayer(
     navBottom: Dp,
     onSelectCategory: (String) -> Unit,
     onOpenCategorySheet: () -> Unit,
+    onOpenDescription: () -> Unit,
     onSwitchChannel: (MediaItem) -> Unit,
     onToggleFavorite: () -> Unit,
     onOpenExternal: () -> Unit,
@@ -1631,22 +1715,44 @@ private fun LiveFeedBelowPlayer(
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onOpenDescription)
+                            .padding(vertical = 2.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
                         Text(
                             text = channel.name,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MatteGlassTokens.CharcoalPrimary,
+                            color = Color.White,
+                            style = TextStyle(shadow = HeaderTextShadow),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            text = statsLine.ifBlank { "Live TV Channel" },
-                            fontSize = 12.sp,
-                            color = MatteGlassTokens.CharcoalMuted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = statsLine.ifBlank { "Live TV Channel" },
+                                fontSize = 12.sp,
+                                color = Color(0xE6E2E8F0),
+                                style = TextStyle(shadow = HeaderTextShadow),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            Text(
+                                text = "...more",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                style = TextStyle(shadow = HeaderTextShadow)
+                            )
+                        }
                     }
 
                     Row(
@@ -1823,6 +1929,7 @@ private fun VodContentBelowPlayer(
     isFavorite: Boolean,
     navBottom: Dp,
     onToggleFavorite: () -> Unit,
+    onOpenDescription: () -> Unit,
     onDownload: () -> Unit,
     onOpenExternal: () -> Unit,
     onEnterPip: () -> Unit,
@@ -1852,12 +1959,20 @@ private fun VodContentBelowPlayer(
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onOpenDescription)
+                        .padding(vertical = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
                         text = item.name,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MatteGlassTokens.CharcoalPrimary,
+                        color = Color.White,
+                        style = TextStyle(shadow = HeaderTextShadow),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1867,13 +1982,27 @@ private fun VodContentBelowPlayer(
                         detailInfo.duration.takeIf { it.isNotBlank() },
                         statsLine.takeIf { it.isNotBlank() }
                     ).joinToString(" • ")
-                    if (meta.isNotBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (meta.isNotBlank()) {
+                            Text(
+                                text = meta,
+                                fontSize = 12.sp,
+                                color = Color(0xE6E2E8F0),
+                                style = TextStyle(shadow = HeaderTextShadow),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                        }
                         Text(
-                            text = meta,
+                            text = "...more",
                             fontSize = 12.sp,
-                            color = MatteGlassTokens.CharcoalMuted,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                            style = TextStyle(shadow = HeaderTextShadow)
                         )
                     }
                 }
@@ -1915,25 +2044,41 @@ private fun VodContentBelowPlayer(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .livelyPress(pressedScale = 0.98f, onClick = onOpenDescription)
                             .clip(RoundedCornerShape(12.dp))
                             .background(MatteGlassTokens.CardGlassBg)
                             .border(0.8.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
                             .padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        if (detailInfo.genre.isNotBlank()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = detailInfo.genre,
+                                text = detailInfo.genre.ifBlank { "Description" },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MatteGlassTokens.CharcoalPrimary
+                                color = MatteGlassTokens.CharcoalPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "Read more",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MatteGlassTokens.CharcoalMuted
                             )
                         }
                         Text(
                             text = detailInfo.plot,
                             fontSize = 13.sp,
-                            lineHeight = 19.sp,
-                            color = MatteGlassTokens.CharcoalMuted
+                            lineHeight = 18.sp,
+                            color = MatteGlassTokens.CharcoalMuted,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -2438,12 +2583,13 @@ private fun YouTubeActionPill(
     label: String,
     onClick: () -> Unit
 ) {
+    val pillBg = if (MatteGlassTokens.isDark) MatteGlassTokens.FieldGlassBg else Color(0xE8FFFFFF)
     Row(
         modifier = Modifier
             .livelyPress(pressedScale = 0.93f, onClick = onClick)
             .clip(CircleShape)
-            .background(MatteGlassTokens.FieldGlassBg)
-            .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape)
+            .background(pillBg)
+            .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -2971,4 +3117,189 @@ private fun formatDelay(delayMs: Long): String {
     val sec = delayMs / 1000f
     return if (delayMs > 0L) String.format(Locale.US, "+%.1fs", sec)
     else String.format(Locale.US, "%.1fs", sec)
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MediaDescriptionSheet(
+    item: MediaItem,
+    isLive: Boolean,
+    detailInfo: MediaDetailInfo,
+    episodeCount: Int,
+    videoResolution: String,
+    videoCodec: String,
+    audioInfo: String,
+    bitrateInfo: String,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MatteGlassTokens.SheetBg,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Description",
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MatteGlassTokens.CharcoalPrimary
+                )
+                IconButton(onClick = onDismiss, modifier = Modifier.size(34.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MatteGlassTokens.CharcoalPrimary,
+                        modifier = Modifier.size(21.dp)
+                    )
+                }
+            }
+
+            HorizontalDivider(thickness = 0.75.dp, color = MatteGlassTokens.HairlineDivider)
+
+            Text(
+                text = item.name,
+                fontSize = 17.sp,
+                lineHeight = 23.sp,
+                fontWeight = FontWeight.Bold,
+                color = MatteGlassTokens.CharcoalPrimary
+            )
+
+            val statItems = if (isLive) {
+                listOf(
+                    "Status" to "LIVE",
+                    "Quality" to videoResolution.ifBlank { "Stream" },
+                    "Category" to item.group.ifBlank { "Live TV" }
+                )
+            } else {
+                listOfNotNull(
+                    detailInfo.rating.takeIf { it.isNotBlank() && it != "0" && it != "0.0" }?.let { "Rating" to "★ $it" }
+                        ?: item.badge.takeIf { it.isNotBlank() }?.let { "Info" to it },
+                    detailInfo.releaseYear.takeIf { it.isNotBlank() }?.let { "Year" to it },
+                    detailInfo.duration.takeIf { it.isNotBlank() }?.let { "Duration" to it }
+                        ?: episodeCount.takeIf { it > 0 }?.let { "Episodes" to "$it" }
+                ).ifEmpty {
+                    listOf("Category" to item.group.ifBlank { "Video" })
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                statItems.take(3).forEach { (label, value) ->
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MatteGlassTokens.CardGlassBg)
+                            .border(0.8.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = value,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MatteGlassTokens.CharcoalPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = label,
+                            fontSize = 11.sp,
+                            color = MatteGlassTokens.CharcoalMuted,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            if (!isLive) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MatteGlassTokens.CardGlassBg)
+                        .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (detailInfo.genre.isNotBlank()) {
+                        Text(
+                            text = detailInfo.genre,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MatteGlassTokens.CharcoalPrimary
+                        )
+                    }
+                    Text(
+                        text = detailInfo.plot.ifBlank { "No description available for this title." },
+                        fontSize = 14.sp,
+                        lineHeight = 21.sp,
+                        color = if (detailInfo.plot.isNotBlank()) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted
+                    )
+                }
+            }
+
+            val techRows = listOfNotNull(
+                item.group.takeIf { it.isNotBlank() }?.let { "Group" to it },
+                videoResolution.takeIf { it.isNotBlank() }?.let { "Resolution" to it },
+                videoCodec.takeIf { it.isNotBlank() }?.let { "Video Codec" to it },
+                audioInfo.takeIf { it.isNotBlank() }?.let { "Audio" to it },
+                bitrateInfo.takeIf { it.isNotBlank() }?.let { "Bitrate" to it }
+            )
+            if (techRows.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MatteGlassTokens.CardGlassBg)
+                        .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Stream Info",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MatteGlassTokens.CharcoalPrimary
+                    )
+                    techRows.forEach { (k, v) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(k, fontSize = 12.sp, color = MatteGlassTokens.CharcoalMuted)
+                            Text(
+                                text = v,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MatteGlassTokens.CharcoalPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

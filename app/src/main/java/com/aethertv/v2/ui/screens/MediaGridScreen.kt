@@ -79,13 +79,13 @@ fun MediaGridScreen(
                     columns = GridCells.Fixed(2),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 8.dp,
-                        end = 8.dp,
+                        start = 6.dp,
+                        end = 6.dp,
                         top = topInset + 62.dp,
                         bottom = navInset + 86.dp + extraBottomPadding
                     ),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(items, key = { it.id }, contentType = { "poster_card" }) { item ->
                         PosterMediaCard(

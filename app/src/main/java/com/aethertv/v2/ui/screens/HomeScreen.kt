@@ -220,7 +220,7 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             items(recentlyWatched, key = { "recent_${it.id}" }, contentType = { "recent_card" }) { item ->
-                                val thumbShape = RoundedCornerShape(10.dp)
+                                val thumbShape = RoundedCornerShape(4.dp)
                                 val thumbReq = remember(item.posterUrl) {
                                     item.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
                                         ImageRequest.Builder(context)
@@ -244,7 +244,6 @@ fun HomeScreen(
                                             .height(172.dp)
                                             .clip(thumbShape)
                                             .background(Color(0xFF1F2430))
-                                            .border(0.9.dp, MatteGlassTokens.CardRimBrush, thumbShape)
                                     ) {
                                         if (thumbReq != null) {
                                             AsyncImage(
