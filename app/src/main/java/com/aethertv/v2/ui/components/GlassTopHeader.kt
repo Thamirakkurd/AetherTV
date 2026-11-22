@@ -6,7 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -15,15 +15,17 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,13 +47,13 @@ fun GlassTopHeader(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = title,
-            fontSize = 26.sp,
+            fontSize = 25.sp,
             fontWeight = FontWeight.Bold,
             color = MatteGlassTokens.CharcoalPrimary,
             letterSpacing = (-0.4).sp
@@ -59,10 +61,23 @@ fun GlassTopHeader(
 
         Row(
             modifier = Modifier
+                .shadow(
+                    elevation = 8.dp,
+                    shape = CircleShape,
+                    ambientColor = Color.Black.copy(alpha = 0.08f),
+                    spotColor = Color.Black.copy(alpha = 0.08f)
+                )
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.85f))
-                .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), CircleShape)
-                .padding(horizontal = 6.dp, vertical = 4.dp),
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.90f),
+                            Color(0xFFF2F4F8).copy(alpha = 0.84f)
+                        )
+                    )
+                )
+                .border(BorderStroke(1.2.dp, Color.White), CircleShape)
+                .padding(horizontal = 6.dp, vertical = 3.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -114,7 +129,7 @@ private fun HeaderPillIcon(
 ) {
     Box(
         modifier = Modifier
-            .size(34.dp)
+            .size(32.dp)
             .clip(CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
@@ -123,13 +138,13 @@ private fun HeaderPillIcon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = MatteGlassTokens.CharcoalPrimary,
-            modifier = Modifier.size(19.dp)
+            modifier = Modifier.size(18.dp)
         )
     }
 }
 
 @Composable
-fun GlassSearchStrip(
+fun GlassSearchPill(
     query: String,
     placeholder: String,
     onQueryChange: (String) -> Unit,
@@ -138,34 +153,72 @@ fun GlassSearchStrip(
 ) {
     Row(
         modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .height(36.dp)
+            .shadow(
+                elevation = 6.dp,
+                shape = CircleShape,
+                ambientColor = Color.Black.copy(alpha = 0.07f),
+                spotColor = Color.Black.copy(alpha = 0.07f)
+            )
+            .clip(CircleShape)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.92f),
+                        Color(0xFFF2F4F8).copy(alpha = 0.85f)
+                    )
+                )
+            )
+            .border(BorderStroke(1.2.dp, Color.White), CircleShape)
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            placeholder = { Text(placeholder, fontSize = 13.sp, color = MatteGlassTokens.CharcoalMuted) },
-            singleLine = true,
-            shape = RoundedCornerShape(16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedBorderColor = MatteGlassTokens.CharcoalPrimary,
-                unfocusedBorderColor = Color.Black.copy(alpha = 0.12f)
-            ),
-            trailingIcon = {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onClose),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(16.dp))
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
+        Icon(
+            imageVector = Icons.Default.Search,
+            contentDescription = null,
+            tint = MatteGlassTokens.CharcoalMuted,
+            modifier = Modifier.size(15.dp)
         )
+        Box(
+            modifier = Modifier.widthIn(min = 95.dp, max = 145.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            if (query.isEmpty()) {
+                Text(
+                    text = placeholder,
+                    fontSize = 12.sp,
+                    color = MatteGlassTokens.CharcoalMuted,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                textStyle = TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MatteGlassTokens.CharcoalPrimary
+                ),
+                cursorBrush = SolidColor(MatteGlassTokens.CharcoalPrimary),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onClose),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Close Search",
+                tint = MatteGlassTokens.CharcoalPrimary,
+                modifier = Modifier.size(13.dp)
+            )
+        }
     }
 }

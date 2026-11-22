@@ -9,7 +9,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -63,54 +63,84 @@ fun SettingsScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 110.dp),
+        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. Multiple Named Servers Section
+        // 1. Servers & Playlists
         item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color.White)
-                    .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), RoundedCornerShape(18.dp))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            GlassSettingsCard {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Servers & Playlists (${servers.size})",
+                        text = "Servers (${servers.size})",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MatteGlassTokens.CharcoalPrimary
+                        color = MatteGlassTokens.CharcoalPrimary,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.weight(1f)
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(CircleShape)
                                 .background(MatteGlassTokens.CanvasWhite)
+                                .border(BorderStroke(1.dp, Color.White), CircleShape)
                                 .clickable(onClick = onRefreshPlaylist)
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh", modifier = Modifier.size(14.dp))
-                                Text("Refresh", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Refresh",
+                                    tint = MatteGlassTokens.CharcoalPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "Refresh",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MatteGlassTokens.CharcoalPrimary,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
                         }
+
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(CircleShape)
                                 .background(MatteGlassTokens.CharcoalPrimary)
                                 .clickable(onClick = onAddServerClick)
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                .padding(horizontal = 11.dp, vertical = 6.dp)
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Icon(Icons.Default.Add, contentDescription = "Add", tint = Color.White, modifier = Modifier.size(14.dp))
-                                Text("Add", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = "Add",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "Add",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
                         }
                     }
@@ -119,7 +149,7 @@ fun SettingsScreen(
                 if (servers.isEmpty()) {
                     Text(
                         text = "No servers added yet. Tap Add to configure one.",
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         color = MatteGlassTokens.CharcoalMuted
                     )
                 } else {
@@ -128,28 +158,33 @@ fun SettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(if (isActive) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CanvasWhite)
                                 .clickable { onSelectServer(srv) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
                                     if (isActive) {
                                         Icon(
                                             Icons.Default.CheckCircle,
                                             contentDescription = "Active",
                                             tint = Color.White,
-                                            modifier = Modifier.size(15.dp)
+                                            modifier = Modifier.size(14.dp)
                                         )
                                     }
                                     Text(
                                         text = srv.name,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isActive) Color.White else MatteGlassTokens.CharcoalPrimary
+                                        color = if (isActive) Color.White else MatteGlassTokens.CharcoalPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                                 Text(
@@ -163,7 +198,7 @@ fun SettingsScreen(
 
                             Box(
                                 modifier = Modifier
-                                    .size(30.dp)
+                                    .size(28.dp)
                                     .clip(CircleShape)
                                     .clickable { onDeleteServer(srv) },
                                 contentAlignment = Alignment.Center
@@ -172,7 +207,7 @@ fun SettingsScreen(
                                     Icons.Default.Delete,
                                     contentDescription = "Delete Server",
                                     tint = if (isActive) Color.White.copy(alpha = 0.85f) else MatteGlassTokens.NotificationDot,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
                             }
                         }
@@ -181,43 +216,42 @@ fun SettingsScreen(
             }
         }
 
-        // 2. Downloader Option (Built-in vs External 1DM+)
+        // 2. Movie & Series Downloader
         item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color.White)
-                    .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), RoundedCornerShape(18.dp))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            GlassSettingsCard {
                 Text(
                     text = "Movie & Series Downloader",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = MatteGlassTokens.CharcoalPrimary
                 )
-                DownloadMode.entries.forEach { mode ->
-                    val selected = mode == downloadMode
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CanvasWhite)
-                            .clickable { onChangeDownloadMode(mode) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = mode.label,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (selected) Color.White else MatteGlassTokens.CharcoalPrimary
-                        )
-                        if (selected) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DownloadMode.entries.forEach { mode ->
+                        val selected = mode == downloadMode
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CanvasWhite)
+                                .clickable { onChangeDownloadMode(mode) }
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = mode.label,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (selected) Color.White else MatteGlassTokens.CharcoalPrimary
+                            )
+                            if (selected) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -227,15 +261,7 @@ fun SettingsScreen(
         // 3. Offline Downloads Library
         if (downloadedFiles.isNotEmpty()) {
             item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Color.White)
-                        .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), RoundedCornerShape(18.dp))
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                GlassSettingsCard {
                     Text(
                         text = "Downloaded Videos (${downloadedFiles.size})",
                         fontSize = 15.sp,
@@ -250,7 +276,7 @@ fun SettingsScreen(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(MatteGlassTokens.CanvasWhite)
                                 .clickable { onPlayDownloadedFile(file) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -270,14 +296,14 @@ fun SettingsScreen(
                                     Icons.Default.PlayArrow,
                                     contentDescription = "Play",
                                     tint = MatteGlassTokens.CharcoalPrimary,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(19.dp)
                                 )
                                 Icon(
                                     Icons.Default.Delete,
                                     contentDescription = "Delete",
                                     tint = MatteGlassTokens.NotificationDot,
                                     modifier = Modifier
-                                        .size(20.dp)
+                                        .size(19.dp)
                                         .clickable { onDeleteDownloadedFile(file) }
                                 )
                             }
@@ -289,112 +315,99 @@ fun SettingsScreen(
 
         // 4. Library Summary & Reset
         item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color.White)
-                    .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), RoundedCornerShape(18.dp))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "Library Summary",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MatteGlassTokens.CharcoalPrimary
-                )
-                Text(
-                    text = "Favorites: $favoritesCount  •  Recently Watched: $recentCount",
-                    fontSize = 13.sp,
-                    color = MatteGlassTokens.CharcoalMuted
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MatteGlassTokens.NotificationDot.copy(alpha = 0.12f))
-                        .clickable(onClick = onClearAll)
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                ) {
-                    Text(
-                        text = "Clear All Data",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MatteGlassTokens.NotificationDot
-                    )
-                }
-            }
-        }
-
-        // 5. About Section with Custom ThamerAK Logo + GitHub Link
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color.White)
-                    .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), RoundedCornerShape(18.dp))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "About AetherTV",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MatteGlassTokens.CharcoalPrimary
-                )
-
+            GlassSettingsCard {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    ThamerAkLogo(modifier = Modifier.size(56.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            text = "ThamerAK",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.ExtraBold,
+                            text = "Library Summary",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
                             color = MatteGlassTokens.CharcoalPrimary
                         )
                         Text(
-                            text = "AetherTV v2 • Built with Kotlin & Compose",
+                            text = "Favorites: $favoritesCount  •  Recent: $recentCount",
                             fontSize = 12.sp,
                             color = MatteGlassTokens.CharcoalMuted
                         )
                     }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MatteGlassTokens.CharcoalPrimary)
-                        .clickable {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Thamirakkurd"))
-                                context.startActivity(intent)
-                            } catch (_: Exception) {
-                            }
-                        }
-                        .padding(horizontal = 14.dp, vertical = 11.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(MatteGlassTokens.NotificationDot.copy(alpha = 0.12f))
+                            .clickable(onClick = onClearAll)
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
                     ) {
                         Text(
-                            text = "github.com/Thamirakkurd",
-                            fontSize = 13.sp,
+                            text = "Clear All",
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White
+                            color = MatteGlassTokens.NotificationDot,
+                            maxLines = 1,
+                            softWrap = false
                         )
-                        Icon(
-                            imageVector = Icons.Default.OpenInNew,
-                            contentDescription = "Open GitHub",
-                            tint = Color.White,
-                            modifier = Modifier.size(15.dp)
+                    }
+                }
+            }
+        }
+
+        // 5. About AetherTV with ThamerAK Logo + GitHub Link
+        item {
+            GlassSettingsCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ThamerAkLogo(modifier = Modifier.size(50.dp))
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "ThamerAK",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MatteGlassTokens.CharcoalPrimary
                         )
+                        Text(
+                            text = "AetherTV v2 • Kotlin & Compose",
+                            fontSize = 12.sp,
+                            color = MatteGlassTokens.CharcoalMuted
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(MatteGlassTokens.CharcoalPrimary)
+                            .clickable {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Thamirakkurd"))
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "GitHub",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                            Icon(
+                                imageVector = Icons.Default.OpenInNew,
+                                contentDescription = "Open GitHub",
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -403,24 +416,52 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun GlassSettingsCard(
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(20.dp),
+                ambientColor = Color.Black.copy(alpha = 0.06f),
+                spotColor = Color.Black.copy(alpha = 0.06f)
+            )
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.92f),
+                        Color(0xFFF4F6FA).copy(alpha = 0.86f)
+                    )
+                )
+            )
+            .border(BorderStroke(1.2.dp, Color.White), RoundedCornerShape(20.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        content = content
+    )
+}
+
+@Composable
 private fun ThamerAkLogo(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(
                 Brush.linearGradient(
                     colors = listOf(Color(0xFF141820), Color(0xFF2B3445))
                 )
             )
-            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)), RoundedCornerShape(16.dp)),
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)), RoundedCornerShape(14.dp)),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.fillMaxSize().padding(11.dp)) {
+        Canvas(modifier = Modifier.fillMaxSize().padding(10.dp)) {
             val w = size.width
             val h = size.height
             val stroke = Stroke(width = w * 0.09f, cap = StrokeCap.Round)
 
-            // Stylized "T" top crossbar & stem
             drawLine(
                 color = Color.White,
                 start = Offset(w * 0.14f, h * 0.22f),
@@ -436,7 +477,6 @@ private fun ThamerAkLogo(modifier: Modifier = Modifier) {
                 cap = StrokeCap.Round
             )
 
-            // Stylized "A" peak & "K" diagonal flare
             val akPath = Path().apply {
                 moveTo(w * 0.48f, h * 0.80f)
                 lineTo(w * 0.66f, h * 0.36f)

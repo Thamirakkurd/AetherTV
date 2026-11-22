@@ -48,7 +48,6 @@ import com.aethertv.v2.data.ServerStore
 import com.aethertv.v2.data.XtreamClient
 import com.aethertv.v2.ui.components.AddPlaylistDialog
 import com.aethertv.v2.ui.components.FloatingGlassNavBar
-import com.aethertv.v2.ui.components.GlassSearchStrip
 import com.aethertv.v2.ui.components.GlassTopHeader
 import com.aethertv.v2.ui.components.NavTabItem
 import com.aethertv.v2.ui.screens.HomeScreen
@@ -776,17 +775,7 @@ private fun AetherV2App(
                     onAddClick = { showAddDialog = true }
                 )
 
-                if (showSearch && selectedTab in 1..3) {
-                    GlassSearchStrip(
-                        query = searchQuery,
-                        placeholder = "Search ${tabs[selectedTab].label.lowercase()}...",
-                        onQueryChange = { searchQuery = it },
-                        onClose = {
-                            searchQuery = ""
-                            showSearch = false
-                        }
-                    )
-                }
+
 
                 statusMessage?.let { msg ->
                     Text(
@@ -833,6 +822,11 @@ private fun AetherV2App(
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
                             emptyMessage = if (playlistMode.isBlank()) "Tap + to add your server" else "No live channels in this category",
+                            showSearchInRow = showSearch,
+                            searchQuery = searchQuery,
+                            searchPlaceholder = "Search live...",
+                            onSearchQueryChange = { searchQuery = it },
+                            onCloseSearch = { searchQuery = ""; showSearch = false },
                             onSelectCategory = { cat ->
                                 if (cat == "All") confirmAllTab = 1
                                 else loadLiveCategory(cat, forceNetwork = false)
@@ -862,6 +856,11 @@ private fun AetherV2App(
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes server for Movies" else "No movies in this category",
+                            showSearchInRow = showSearch,
+                            searchQuery = searchQuery,
+                            searchPlaceholder = "Search movies...",
+                            onSearchQueryChange = { searchQuery = it },
+                            onCloseSearch = { searchQuery = ""; showSearch = false },
                             onSelectCategory = { cat ->
                                 if (cat == "All") confirmAllTab = 2
                                 else loadVodCategory(cat, forceNetwork = false)
@@ -891,6 +890,11 @@ private fun AetherV2App(
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes server for Series" else "No series in this category",
+                            showSearchInRow = showSearch,
+                            searchQuery = searchQuery,
+                            searchPlaceholder = "Search series...",
+                            onSearchQueryChange = { searchQuery = it },
+                            onCloseSearch = { searchQuery = ""; showSearch = false },
                             onSelectCategory = { cat ->
                                 if (cat == "All") confirmAllTab = 3
                                 else loadSeriesCategory(cat, forceNetwork = false)
