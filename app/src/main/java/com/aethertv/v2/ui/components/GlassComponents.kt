@@ -185,57 +185,66 @@ fun FloatingGlassNavBar(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Surface(
-            shape = RoundedCornerShape(32.dp),
-            color = MatteGlassTokens.NavGlassBg,
-            border = matteGlassBorder(),
-            shadowElevation = 0.dp,
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp)
+                .shadow(
+                    elevation = 12.dp,
+                    shape = CircleShape,
+                    ambientColor = Color.Black.copy(alpha = 0.14f),
+                    spotColor = Color.Black.copy(alpha = 0.14f)
+                )
+                .clip(CircleShape)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.88f),
+                            Color(0xFFF2F4F8).copy(alpha = 0.82f)
+                        )
+                    )
+                )
+                .border(BorderStroke(1.2.dp, Color.White.copy(alpha = 0.95f)), CircleShape)
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(matteInnerHighlightBrush())
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                items.forEachIndexed { index, item ->
-                    val selected = index == selectedIndex
-                    val pillModifier = if (selected) {
-                        Modifier
-                            .clip(RoundedCornerShape(26.dp))
-                            .background(MatteGlassTokens.ActivePillBg)
-                            .border(1.dp, MatteGlassTokens.NeutralBorder, RoundedCornerShape(26.dp))
-                    } else {
-                        Modifier.clip(RoundedCornerShape(26.dp))
-                    }
+            items.forEachIndexed { index, item ->
+                val isSelected = index == selectedIndex
+                val contentColor = if (isSelected) {
+                    MatteGlassTokens.CharcoalPrimary
+                } else {
+                    MatteGlassTokens.CharcoalMuted
+                }
 
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .weight(1f)
-                            .then(pillModifier)
-                            .clickable { onSelect(index) }
-                            .padding(vertical = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = item.label,
-                            tint = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = item.label,
-                            fontSize = 10.sp,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted,
-                            maxLines = 1
-                        )
-                    }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .clickable { onSelect(index) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = item.label,
+                        tint = contentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = item.label,
+                        fontSize = 10.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = contentColor,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
