@@ -1,11 +1,14 @@
 package com.aethertv.v2.data
 
+import android.util.JsonReader
+import android.util.JsonToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 
 object XtreamClient {
@@ -13,7 +16,7 @@ object XtreamClient {
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
         .build()
 
     fun normalizeHost(raw: String): String {
@@ -38,6 +41,195 @@ object XtreamClient {
         }
     }
 
+    suspend fun fetchLiveStreams(
+        url: String,
+        host: String,
+        user: String,
+        pass: String,
+        categoryName: String,
+        categoryMap: Map<String, String> = emptyMap()
+    ): List<MediaItem> = withContext(Dispatchers.IO) {
+        val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
+            val stream = response.body?.byteStream() ?: return@withContext emptyList()
+            val out = ArrayList<MediaItem>(256)
+            val seen = HashSet<String>(256)
+            JsonReader(InputStreamReader(stream, Charsets.UTF_8)).use { reader ->
+                reader.isLenient = true
+                if (reader.peek() != JsonToken.BEGIN_ARRAY) return@withContext emptyList()
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                        reader.skipValue()
+                        continue
+                    }
+                    var streamId = ""
+                    var name = ""
+                    var icon = ""
+                    var catId = ""
+                    reader.beginObject()
+                    while (reader.hasNext()) {
+                        when (reader.nextName()) {
+                            "stream_id" -> streamId = reader.nextSafeString()
+                            "name" -> name = reader.nextSafeString()
+                            "stream_icon" -> icon = reader.nextSafeString()
+                            "category_id" -> catId = reader.nextSafeString()
+                            else -> reader.skipValue()
+                        }
+                    }
+                    reader.endObject()
+                    if (streamId.isNotEmpty() && name.isNotEmpty()) {
+                        val id = "live_$streamId"
+                        if (seen.add(id)) {
+                            out.add(
+                                MediaItem(
+                                    id = id,
+                                    name = name,
+                                    group = categoryMap[catId] ?: categoryName,
+                                    posterUrl = icon.ifEmpty { null },
+                                    streamUrl = "$host/live/$user/$pass/$streamId.ts",
+                                    contentType = ContentType.LIVE,
+                                    badge = "LIVE"
+                                )
+                            )
+                        }
+                    }
+                }
+                reader.endArray()
+            }
+            out
+        }
+    }
+
+    suspend fun fetchVodStreams(
+        url: String,
+        host: String,
+        user: String,
+        pass: String,
+        categoryName: String,
+        categoryMap: Map<String, String> = emptyMap()
+    ): List<MediaItem> = withContext(Dispatchers.IO) {
+        val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
+            val stream = response.body?.byteStream() ?: return@withContext emptyList()
+            val out = ArrayList<MediaItem>(256)
+            val seen = HashSet<String>(256)
+            JsonReader(InputStreamReader(stream, Charsets.UTF_8)).use { reader ->
+                reader.isLenient = true
+                if (reader.peek() != JsonToken.BEGIN_ARRAY) return@withContext emptyList()
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                        reader.skipValue()
+                        continue
+                    }
+                    var streamId = ""
+                    var name = ""
+                    var ext = ""
+                    var poster = ""
+                    var rating = ""
+                    var catId = ""
+                    reader.beginObject()
+                    while (reader.hasNext()) {
+                        when (reader.nextName()) {
+                            "stream_id" -> streamId = reader.nextSafeString()
+                            "name" -> name = reader.nextSafeString()
+                            "container_extension" -> ext = reader.nextSafeString()
+                            "stream_icon" -> poster = reader.nextSafeString()
+                            "rating" -> rating = reader.nextSafeString()
+                            "category_id" -> catId = reader.nextSafeString()
+                            else -> reader.skipValue()
+                        }
+                    }
+                    reader.endObject()
+                    if (streamId.isNotEmpty() && name.isNotEmpty()) {
+                        val id = "vod_$streamId"
+                        if (seen.add(id)) {
+                            val badge = if (rating.isNotEmpty() && rating != "0") "★ $rating" else "MOVIE"
+                            out.add(
+                                MediaItem(
+                                    id = id,
+                                    name = name,
+                                    group = categoryMap[catId] ?: categoryName,
+                                    posterUrl = poster.ifEmpty { null },
+                                    streamUrl = "$host/movie/$user/$pass/$streamId.${ext.ifEmpty { "mp4" }}",
+                                    contentType = ContentType.MOVIE,
+                                    badge = badge
+                                )
+                            )
+                        }
+                    }
+                }
+                reader.endArray()
+            }
+            out
+        }
+    }
+
+    suspend fun fetchSeries(
+        url: String,
+        categoryName: String,
+        categoryMap: Map<String, String> = emptyMap()
+    ): List<MediaItem> = withContext(Dispatchers.IO) {
+        val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
+            val stream = response.body?.byteStream() ?: return@withContext emptyList()
+            val out = ArrayList<MediaItem>(256)
+            val seen = HashSet<String>(256)
+            JsonReader(InputStreamReader(stream, Charsets.UTF_8)).use { reader ->
+                reader.isLenient = true
+                if (reader.peek() != JsonToken.BEGIN_ARRAY) return@withContext emptyList()
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                        reader.skipValue()
+                        continue
+                    }
+                    var seriesId = ""
+                    var name = ""
+                    var cover = ""
+                    var rating = ""
+                    var catId = ""
+                    reader.beginObject()
+                    while (reader.hasNext()) {
+                        when (reader.nextName()) {
+                            "series_id" -> seriesId = reader.nextSafeString()
+                            "name" -> name = reader.nextSafeString()
+                            "cover" -> cover = reader.nextSafeString()
+                            "rating" -> rating = reader.nextSafeString()
+                            "category_id" -> catId = reader.nextSafeString()
+                            else -> reader.skipValue()
+                        }
+                    }
+                    reader.endObject()
+                    if (seriesId.isNotEmpty() && name.isNotEmpty()) {
+                        val id = "series_$seriesId"
+                        if (seen.add(id)) {
+                            val badge = if (rating.isNotEmpty() && rating != "0") "★ $rating" else "SERIES"
+                            out.add(
+                                MediaItem(
+                                    id = id,
+                                    name = name,
+                                    group = categoryMap[catId] ?: categoryName,
+                                    posterUrl = cover.ifEmpty { null },
+                                    streamUrl = "series://$seriesId",
+                                    contentType = ContentType.SERIES,
+                                    seriesId = seriesId,
+                                    badge = badge
+                                )
+                            )
+                        }
+                    }
+                }
+                reader.endArray()
+            }
+            out
+        }
+    }
+
     fun parseCategories(json: String): List<CategoryItem> {
         val trimmed = json.trim()
         if (!trimmed.startsWith("[")) return emptyList()
@@ -50,114 +242,6 @@ object XtreamClient {
             if (id.isNotEmpty() && name.isNotEmpty()) {
                 out.add(CategoryItem(id = id, name = name))
             }
-        }
-        return out
-    }
-
-    fun parseLiveStreams(
-        json: String,
-        host: String,
-        user: String,
-        pass: String,
-        categoryName: String,
-        categoryMap: Map<String, String> = emptyMap()
-    ): List<MediaItem> {
-        val trimmed = json.trim()
-        if (!trimmed.startsWith("[")) return emptyList()
-        val arr = JSONArray(trimmed)
-        val out = ArrayList<MediaItem>(arr.length())
-        for (i in 0 until arr.length()) {
-            val obj = arr.optJSONObject(i) ?: continue
-            val streamId = obj.safeStr("stream_id")
-            val name = obj.safeStr("name")
-            if (streamId.isEmpty() || name.isEmpty()) continue
-            val icon = obj.safeStr("stream_icon").ifEmpty { null }
-            val catId = obj.safeStr("category_id")
-            val resolvedGroup = categoryMap[catId] ?: categoryName
-            out.add(
-                MediaItem(
-                    id = "live_$streamId",
-                    name = name,
-                    group = resolvedGroup,
-                    posterUrl = icon,
-                    streamUrl = "$host/live/$user/$pass/$streamId.ts",
-                    contentType = ContentType.LIVE,
-                    badge = "LIVE"
-                )
-            )
-        }
-        return out
-    }
-
-    fun parseVodStreams(
-        json: String,
-        host: String,
-        user: String,
-        pass: String,
-        categoryName: String,
-        categoryMap: Map<String, String> = emptyMap()
-    ): List<MediaItem> {
-        val trimmed = json.trim()
-        if (!trimmed.startsWith("[")) return emptyList()
-        val arr = JSONArray(trimmed)
-        val out = ArrayList<MediaItem>(arr.length())
-        for (i in 0 until arr.length()) {
-            val obj = arr.optJSONObject(i) ?: continue
-            val streamId = obj.safeStr("stream_id")
-            val name = obj.safeStr("name")
-            if (streamId.isEmpty() || name.isEmpty()) continue
-            val ext = obj.safeStr("container_extension").ifEmpty { "mp4" }
-            val poster = obj.safeStr("stream_icon").ifEmpty { null }
-            val rating = obj.safeStr("rating")
-            val badge = if (rating.isNotEmpty() && rating != "0") "★ $rating" else "MOVIE"
-            val catId = obj.safeStr("category_id")
-            val resolvedGroup = categoryMap[catId] ?: categoryName
-            out.add(
-                MediaItem(
-                    id = "vod_$streamId",
-                    name = name,
-                    group = resolvedGroup,
-                    posterUrl = poster,
-                    streamUrl = "$host/movie/$user/$pass/$streamId.$ext",
-                    contentType = ContentType.MOVIE,
-                    badge = badge
-                )
-            )
-        }
-        return out
-    }
-
-    fun parseSeries(
-        json: String,
-        categoryName: String,
-        categoryMap: Map<String, String> = emptyMap()
-    ): List<MediaItem> {
-        val trimmed = json.trim()
-        if (!trimmed.startsWith("[")) return emptyList()
-        val arr = JSONArray(trimmed)
-        val out = ArrayList<MediaItem>(arr.length())
-        for (i in 0 until arr.length()) {
-            val obj = arr.optJSONObject(i) ?: continue
-            val seriesId = obj.safeStr("series_id")
-            val name = obj.safeStr("name")
-            if (seriesId.isEmpty() || name.isEmpty()) continue
-            val cover = obj.safeStr("cover").ifEmpty { null }
-            val rating = obj.safeStr("rating")
-            val badge = if (rating.isNotEmpty() && rating != "0") "★ $rating" else "SERIES"
-            val catId = obj.safeStr("category_id")
-            val resolvedGroup = categoryMap[catId] ?: categoryName
-            out.add(
-                MediaItem(
-                    id = "series_$seriesId",
-                    name = name,
-                    group = resolvedGroup,
-                    posterUrl = cover,
-                    streamUrl = "series://$seriesId",
-                    contentType = ContentType.SERIES,
-                    seriesId = seriesId,
-                    badge = badge
-                )
-            )
         }
         return out
     }
@@ -326,6 +410,21 @@ object XtreamClient {
             out
         } catch (_: Exception) {
             emptyList()
+        }
+    }
+
+    private fun JsonReader.nextSafeString(): String {
+        return when (peek()) {
+            JsonToken.NULL -> {
+                nextNull()
+                ""
+            }
+            JsonToken.STRING, JsonToken.NUMBER -> nextString().trim()
+            JsonToken.BOOLEAN -> nextBoolean().toString()
+            else -> {
+                skipValue()
+                ""
+            }
         }
     }
 
