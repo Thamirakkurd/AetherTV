@@ -642,6 +642,7 @@ fun PosterMediaCard(
         }
     }
 }
+}
 
 @Composable
 private fun CardGlassCircleIcon(
