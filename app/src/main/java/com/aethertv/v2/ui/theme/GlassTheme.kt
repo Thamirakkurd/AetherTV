@@ -15,22 +15,22 @@ import androidx.compose.ui.unit.sp
 
 object MatteGlassTokens {
     val CanvasWhite = Color(0xFFFFFFFF)
+    val SubtleSurface = Color(0xFFF6F6F7)
     val CharcoalPrimary = Color(0xFF18181B)
     val CharcoalAction = Color(0xFF27272A)
     val CharcoalMuted = Color(0xFF52525B)
 
-    // Neutral matte frosted white surfaces (zero blue/color tint)
-    val NavGlassBg = Color(0xBFFFFFFF)          // rgba(255, 255, 255, 0.75)
-    val ActivePillBg = Color(0xE6FFFFFF)        // rgba(255, 255, 255, 0.90)
-    val HeaderPillBg = Color(0xD9F4F4F5)        // rgba(244, 244, 245, 0.85)
-    val NeutralBorder = Color(0xD9E2E2E2)       // rgba(226, 226, 226, 0.85)
-    val InnerTopHighlight = Color(0xF2FFFFFF)   // rgba(255, 255, 255, 0.95)
-    val CardInnerEdge = Color(0x99FFFFFF)       // faint 1dp inner glass edge
+    val NavGlassBg = Color(0xF2FFFFFF)
+    val ActivePillBg = Color(0xFFF1F1F4)
+    val HeaderPillBg = Color(0xFFF4F4F5)
+    val NeutralBorder = Color(0xFFE2E2E6)
+    val GlassNavBorder = Color(0xFFD4D4D8)
+    val InnerTopHighlight = Color(0xF2FFFFFF)
+    val CardInnerEdge = Color(0x26000000)
 
-    // Media card overlays & badges
-    val CardTitleOverlay = Color(0x7318181B)    // rgba(24, 24, 27, 0.45)
-    val BadgeBg = Color(0xD9FFFFFF)             // rgba(255, 255, 255, 0.85)
-    val NotificationDot = Color(0xFFDC2626)     // #DC2626
+    val CardTitleOverlay = Color(0x7318181B)
+    val BadgeBg = Color(0xD9FFFFFF)
+    val NotificationDot = Color(0xFFDC2626)
 }
 
 fun matteGlassBorder(): BorderStroke = BorderStroke(
@@ -66,8 +66,8 @@ private val MatteGlassTypography = Typography(
     titleLarge = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,
-        fontSize = 18.sp,
-        letterSpacing = (-0.2).sp,
+        fontSize = 20.sp,
+        letterSpacing = (-0.25).sp,
         color = MatteGlassTokens.CharcoalPrimary
     ),
     titleMedium = TextStyle(

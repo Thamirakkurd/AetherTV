@@ -9,22 +9,19 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -38,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aethertv.v2.data.DownloadMode
 import com.aethertv.v2.data.SavedServer
+import com.aethertv.v2.ui.components.SimpleScreenHeader
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 import java.io.File
 
@@ -61,353 +59,286 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 100.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MatteGlassTokens.CanvasWhite)
     ) {
-        // 1. Servers & Playlists
-        item {
-            GlassSettingsCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Servers (${servers.size})",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MatteGlassTokens.CharcoalPrimary,
-                        maxLines = 1,
-                        softWrap = false,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(MatteGlassTokens.CanvasWhite)
-                                .border(BorderStroke(1.dp, Color.White), CircleShape)
-                                .clickable(onClick = onRefreshPlaylist)
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Refresh,
-                                    contentDescription = "Refresh",
-                                    tint = MatteGlassTokens.CharcoalPrimary,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Text(
-                                    text = "Refresh",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MatteGlassTokens.CharcoalPrimary,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            }
-                        }
+        SimpleScreenHeader(
+            title = "Settings",
+            onAddClick = onAddServerClick
+        )
 
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(MatteGlassTokens.CharcoalPrimary)
-                                .clickable(onClick = onAddServerClick)
-                                .padding(horizontal = 11.dp, vertical = 6.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 112.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item {
+                SettingsSectionCard(title = "IPTV Servers") {
+                    if (servers.isEmpty()) {
+                        Text(
+                            text = "No servers saved yet. Tap Add Server to connect Xtream Codes or M3U.",
+                            fontSize = 13.sp,
+                            color = MatteGlassTokens.CharcoalMuted
+                        )
+                    } else {
+                        servers.forEach { srv ->
+                            val isActive = srv.id == activeServerId
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isActive) MatteGlassTokens.CanvasWhite else MatteGlassTokens.SubtleSurface,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isActive) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.NeutralBorder
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onSelectServer(srv) }
                             ) {
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = "Add",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Text(
-                                    text = "Add",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (servers.isEmpty()) {
-                    Text(
-                        text = "No servers added yet. Tap Add to configure one.",
-                        fontSize = 12.sp,
-                        color = MatteGlassTokens.CharcoalMuted
-                    )
-                } else {
-                    servers.forEach { srv ->
-                        val isActive = srv.id == activeServerId
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(if (isActive) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CanvasWhite)
-                                .clickable { onSelectServer(srv) }
-                                .padding(horizontal = 12.dp, vertical = 9.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = srv.name.ifBlank { srv.host.ifBlank { "Playlist" } },
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MatteGlassTokens.CharcoalPrimary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                text = srv.mode.uppercase(),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MatteGlassTokens.CharcoalMuted
+                                            )
+                                        }
+                                        val endpoint = if (srv.mode == "xtream") srv.host else srv.m3uUrl
+                                        if (endpoint.isNotBlank()) {
+                                            Text(
+                                                text = endpoint,
+                                                fontSize = 12.sp,
+                                                color = MatteGlassTokens.CharcoalMuted,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
                                     if (isActive) {
                                         Icon(
-                                            Icons.Default.CheckCircle,
+                                            imageVector = Icons.Default.Check,
                                             contentDescription = "Active",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(14.dp)
+                                            tint = MatteGlassTokens.CharcoalPrimary,
+                                            modifier = Modifier.padding(horizontal = 6.dp).size(18.dp)
                                         )
                                     }
-                                    Text(
-                                        text = srv.name,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isActive) Color.White else MatteGlassTokens.CharcoalPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    IconButton(onClick = { onDeleteServer(srv) }, modifier = Modifier.size(32.dp)) {
+                                        Icon(
+                                            imageVector = Icons.Default.DeleteOutline,
+                                            contentDescription = "Delete server",
+                                            tint = MatteGlassTokens.CharcoalMuted,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
-                                Text(
-                                    text = if (srv.mode == "xtream") srv.host else srv.m3uUrl,
-                                    fontSize = 11.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = if (isActive) Color.White.copy(alpha = 0.78f) else MatteGlassTokens.CharcoalMuted
-                                )
                             }
+                        }
+                    }
 
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .clickable { onDeleteServer(srv) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Delete Server",
-                                    tint = if (isActive) Color.White.copy(alpha = 0.85f) else MatteGlassTokens.NotificationDot,
-                                    modifier = Modifier.size(15.dp)
-                                )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MatteGlassTokens.CharcoalPrimary,
+                            modifier = Modifier
+                                .weight(1f).height(42.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onAddServerClick() }
+                        ) {
+                            Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Add, null, tint = MatteGlassTokens.CanvasWhite, modifier = Modifier.size(17.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Add Server", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CanvasWhite)
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MatteGlassTokens.CanvasWhite,
+                            border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+                            modifier = Modifier
+                                .weight(1f).height(42.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onRefreshPlaylist() }
+                        ) {
+                            Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Refresh, null, tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(17.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Refresh Cache", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary)
                             }
                         }
                     }
                 }
             }
-        }
 
-        // 2. Movie & Series Downloader
-        item {
-            GlassSettingsCard {
-                Text(
-                    text = "Movie & Series Downloader",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MatteGlassTokens.CharcoalPrimary
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            item {
+                SettingsSectionCard(title = "Downloader") {
                     DownloadMode.entries.forEach { mode ->
                         val selected = mode == downloadMode
-                        Row(
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CanvasWhite,
+                            border = if (selected) null else BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CanvasWhite)
+                                .clip(RoundedCornerShape(8.dp))
                                 .clickable { onChangeDownloadMode(mode) }
-                                .padding(horizontal = 12.dp, vertical = 9.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = mode.label,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (selected) Color.White else MatteGlassTokens.CharcoalPrimary
-                            )
-                            if (selected) {
-                                Icon(
-                                    Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. Offline Downloads Library
-        if (downloadedFiles.isNotEmpty()) {
-            item {
-                GlassSettingsCard {
-                    Text(
-                        text = "Downloaded Videos (${downloadedFiles.size})",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MatteGlassTokens.CharcoalPrimary
-                    )
-                    downloadedFiles.forEach { file ->
-                        val sizeMb = String.format("%.1f MB", file.length() / (1024f * 1024f))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MatteGlassTokens.CanvasWhite)
-                                .clickable { onPlayDownloadedFile(file) }
-                                .padding(horizontal = 12.dp, vertical = 9.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = file.name,
+                                    text = mode.label,
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = MatteGlassTokens.CharcoalPrimary
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                    color = if (selected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary
                                 )
-                                Text(sizeMb, fontSize = 11.sp, color = MatteGlassTokens.CharcoalMuted)
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(
-                                    Icons.Default.PlayArrow,
-                                    contentDescription = "Play",
-                                    tint = MatteGlassTokens.CharcoalPrimary,
-                                    modifier = Modifier.size(19.dp)
-                                )
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Delete",
-                                    tint = MatteGlassTokens.NotificationDot,
-                                    modifier = Modifier
-                                        .size(19.dp)
-                                        .clickable { onDeleteDownloadedFile(file) }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 4. Library Summary & Reset
-        item {
-            GlassSettingsCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = "Library Summary",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MatteGlassTokens.CharcoalPrimary
-                        )
-                        Text(
-                            text = "Favorites: $favoritesCount  •  Recent: $recentCount",
-                            fontSize = 12.sp,
-                            color = MatteGlassTokens.CharcoalMuted
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(MatteGlassTokens.NotificationDot.copy(alpha = 0.12f))
-                            .clickable(onClick = onClearAll)
-                            .padding(horizontal = 12.dp, vertical = 7.dp)
-                    ) {
-                        Text(
-                            text = "Clear All",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MatteGlassTokens.NotificationDot,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-            }
-        }
-
-        // 5. About AetherTV with ThamerAK Logo + GitHub Link
-        item {
-            GlassSettingsCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ThamerAkLogo(modifier = Modifier.size(50.dp))
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = "ThamerAK",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MatteGlassTokens.CharcoalPrimary
-                        )
-                        Text(
-                            text = "AetherTV v2 • Kotlin & Compose",
-                            fontSize = 12.sp,
-                            color = MatteGlassTokens.CharcoalMuted
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(MatteGlassTokens.CharcoalPrimary)
-                            .clickable {
-                                try {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Thamirakkurd"))
-                                    context.startActivity(intent)
-                                } catch (_: Exception) {
+                                if (selected) {
+                                    Icon(Icons.Default.Check, null, tint = MatteGlassTokens.CanvasWhite, modifier = Modifier.size(16.dp))
                                 }
                             }
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                        }
+                    }
+                }
+            }
+
+            item {
+                SettingsSectionCard(title = "Downloaded Files (${downloadedFiles.size})") {
+                    if (downloadedFiles.isEmpty()) {
+                        Text(
+                            text = "No offline files found in Movies/AetherTV.",
+                            fontSize = 13.sp,
+                            color = MatteGlassTokens.CharcoalMuted
+                        )
+                    } else {
+                        downloadedFiles.forEach { file ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MatteGlassTokens.CanvasWhite,
+                                border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = file.nameWithoutExtension,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MatteGlassTokens.CharcoalPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    IconButton(onClick = { onPlayDownloadedFile(file) }) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "Play file",
+                                            tint = MatteGlassTokens.CharcoalPrimary,
+                                            modifier = Modifier.size(19.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = { onDeleteDownloadedFile(file) }) {
+                                        Icon(
+                                            imageVector = Icons.Default.DeleteOutline,
+                                            contentDescription = "Delete file",
+                                            tint = MatteGlassTokens.CharcoalMuted,
+                                            modifier = Modifier.size(19.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                SettingsSectionCard(title = "Library") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
+                        StatChip(label = "Favorites", value = favoritesCount.toString(), modifier = Modifier.weight(1f))
+                        StatChip(label = "Recent", value = recentCount.toString(), modifier = Modifier.weight(1f))
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MatteGlassTokens.CanvasWhite,
+                        border = BorderStroke(1.dp, MatteGlassTokens.NotificationDot.copy(alpha = 0.45f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(42.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onClearAll() }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = "GitHub",
-                                fontSize = 12.sp,
+                                text = "Clear All Saved Data",
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                            Icon(
-                                imageVector = Icons.Default.OpenInNew,
-                                contentDescription = "Open GitHub",
-                                tint = Color.White,
-                                modifier = Modifier.size(13.dp)
+                                color = MatteGlassTokens.NotificationDot
                             )
                         }
+                    }
+                }
+            }
+
+            item {
+                SettingsSectionCard(title = "About") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Thamirakkurd"))
+                                context.startActivity(intent)
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ThamerAkLogo(modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "ThamerAK",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MatteGlassTokens.CharcoalPrimary
+                            )
+                            Text(
+                                text = "AetherTV v3.0.0 • github.com/Thamirakkurd",
+                                fontSize = 12.sp,
+                                color = MatteGlassTokens.CharcoalMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.OpenInNew,
+                            contentDescription = "Open GitHub",
+                            tint = MatteGlassTokens.CharcoalMuted,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
@@ -416,32 +347,53 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun GlassSettingsCard(
+private fun SettingsSectionCard(
+    title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 8.dp,
-                shape = RoundedCornerShape(20.dp),
-                ambientColor = Color.Black.copy(alpha = 0.06f),
-                spotColor = Color.Black.copy(alpha = 0.06f)
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MatteGlassTokens.HeaderPillBg,
+        border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+        shadowElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MatteGlassTokens.CharcoalPrimary
             )
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.92f),
-                        Color(0xFFF4F6FA).copy(alpha = 0.86f)
-                    )
-                )
-            )
-            .border(BorderStroke(1.2.dp, Color.White), RoundedCornerShape(20.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        content = content
-    )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun StatChip(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MatteGlassTokens.CanvasWhite,
+        border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = label, fontSize = 12.sp, color = MatteGlassTokens.CharcoalMuted)
+            Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
+        }
+    }
 }
 
 @Composable

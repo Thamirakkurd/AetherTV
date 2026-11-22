@@ -1,24 +1,23 @@
 package com.aethertv.v2.ui.components
-import androidx.compose.ui.draw.shadow
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,154 +25,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.aethertv.v2.data.ContentType
+import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.theme.MatteGlassTokens
-import com.aethertv.v2.ui.theme.matteGlassBorder
-import com.aethertv.v2.ui.theme.matteInnerHighlightBrush
 
 data class NavTabItem(
     val label: String,
     val icon: ImageVector
 )
-
-@Composable
-fun GlassTopHeader(
-    title: String,
-    onSearchClick: () -> Unit,
-    onFilterClick: () -> Unit,
-    onAddClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = MatteGlassTokens.HeaderPillBg,
-            border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-            shadowElevation = 0.dp
-        ) {
-            Text(
-                text = title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = MatteGlassTokens.CharcoalPrimary,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
-            )
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            GlassCircleActionButton(icon = Icons.Default.Search, contentDescription = "Search", onClick = onSearchClick)
-            GlassCircleActionButton(icon = Icons.Default.Tune, contentDescription = "Filter", onClick = onFilterClick)
-            GlassCircleActionButton(icon = Icons.Default.Add, contentDescription = "Add", onClick = onAddClick)
-        }
-    }
-}
-
-@Composable
-fun GlassCircleActionButton(
-    icon: ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = CircleShape,
-        color = MatteGlassTokens.HeaderPillBg,
-        border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-        shadowElevation = 0.dp,
-        modifier = Modifier
-            .size(42.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick)
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = MatteGlassTokens.CharcoalAction,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-@Composable
-fun GlassSearchStrip(
-    query: String,
-    placeholder: String,
-    onQueryChange: (String) -> Unit,
-    onClose: () -> Unit
-) {
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        placeholder = { Text(placeholder, color = MatteGlassTokens.CharcoalMuted, fontSize = 14.sp) },
-        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MatteGlassTokens.CharcoalAction) },
-        trailingIcon = {
-            IconButton(onClick = onClose) {
-                Icon(Icons.Default.Close, contentDescription = "Close search", tint = MatteGlassTokens.CharcoalMuted)
-            }
-        },
-        singleLine = true,
-        shape = CircleShape,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MatteGlassTokens.HeaderPillBg,
-            unfocusedContainerColor = MatteGlassTokens.HeaderPillBg,
-            focusedBorderColor = MatteGlassTokens.CharcoalPrimary,
-            unfocusedBorderColor = MatteGlassTokens.NeutralBorder,
-            focusedTextColor = MatteGlassTokens.CharcoalPrimary,
-            unfocusedTextColor = MatteGlassTokens.CharcoalPrimary
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-    )
-}
-
-@Composable
-fun CategoryChipRow(
-    categories: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit
-) {
-    if (categories.isEmpty()) return
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        items(categories, key = { it }) { cat ->
-            val isSelected = cat == selected
-            Surface(
-                shape = CircleShape,
-                color = if (isSelected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.HeaderPillBg,
-                border = if (isSelected) null else BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-                shadowElevation = 0.dp,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable { onSelect(cat) }
-            ) {
-                Text(
-                    text = cat,
-                    fontSize = 12.sp,
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (isSelected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
-                )
-            }
-        }
-    }
-}
 
 @Composable
 fun FloatingGlassNavBar(
@@ -182,50 +50,40 @@ fun FloatingGlassNavBar(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    Surface(
+        shape = CircleShape,
+        color = MatteGlassTokens.NavGlassBg,
+        border = BorderStroke(1.dp, MatteGlassTokens.GlassNavBorder),
+        shadowElevation = 6.dp,
         modifier = modifier
-            .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .fillMaxWidth()
+            .height(62.dp)
     ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .shadow(
-                    elevation = 12.dp,
-                    shape = CircleShape,
-                    ambientColor = Color.Black.copy(alpha = 0.14f),
-                    spotColor = Color.Black.copy(alpha = 0.14f)
-                )
-                .clip(CircleShape)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.88f),
-                            Color(0xFFF2F4F8).copy(alpha = 0.82f)
-                        )
-                    )
-                )
-                .border(BorderStroke(1.2.dp, Color.White.copy(alpha = 0.95f)), CircleShape)
-                .padding(horizontal = 8.dp),
+                .fillMaxSize()
+                .padding(horizontal = 6.dp, vertical = 5.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
             items.forEachIndexed { index, item ->
-                val isSelected = index == selectedIndex
-                val contentColor = if (isSelected) {
-                    MatteGlassTokens.CharcoalPrimary
-                } else {
-                    MatteGlassTokens.CharcoalMuted
-                }
-
+                val selected = index == selectedIndex
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
                         .clip(CircleShape)
+                        .background(
+                            if (selected) MatteGlassTokens.ActivePillBg else Color.Transparent
+                        )
+                        .then(
+                            if (selected) Modifier.border(
+                                BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+                                CircleShape
+                            ) else Modifier
+                        )
                         .clickable { onSelect(index) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
@@ -233,17 +91,16 @@ fun FloatingGlassNavBar(
                     Icon(
                         imageVector = item.icon,
                         contentDescription = item.label,
-                        tint = contentColor,
-                        modifier = Modifier.size(20.dp)
+                        tint = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted,
+                        modifier = Modifier.size(21.dp)
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(Modifier.height(2.dp))
                     Text(
                         text = item.label,
-                        fontSize = 10.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = contentColor,
+                        fontSize = 11.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted,
                         maxLines = 1,
-                        softWrap = false,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -253,305 +110,413 @@ fun FloatingGlassNavBar(
 }
 
 @Composable
-fun GlassMediaCard(
-    title: String,
-    subtitle: String,
-    badgeText: String,
-    showLiveDot: Boolean,
-    toneIndex: Int,
-    imageUrl: String? = null,
-    isFavorite: Boolean = false,
-    onFavoriteClick: () -> Unit = {},
-    onPlayClick: () -> Unit = {},
+fun GlassCircleActionButton(
+    icon: ImageVector,
+    contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var showMenu by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(4.dp)
-    val placeholderBrush = when (toneIndex % 4) {
-        0 -> Brush.verticalGradient(listOf(Color(0xFFD4D4D8), Color(0xFF52525B), Color(0xFF18181B)))
-        1 -> Brush.verticalGradient(listOf(Color(0xFFC4C4CA), Color(0xFF3F3F46), Color(0xFF18181B)))
-        2 -> Brush.verticalGradient(listOf(Color(0xFFE4E4E7), Color(0xFF71717A), Color(0xFF27272A)))
-        else -> Brush.verticalGradient(listOf(Color(0xFFD6D3D1), Color(0xFF57534E), Color(0xFF1C1917)))
+    Surface(
+        shape = CircleShape,
+        color = Color(0xEBFFFFFF),
+        border = BorderStroke(1.dp, MatteGlassTokens.GlassNavBorder),
+        shadowElevation = 0.dp,
+        modifier = modifier
+            .size(42.dp)
+            .clip(CircleShape)
+            .clickable { onClick() }
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = MatteGlassTokens.CharcoalPrimary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun SimpleScreenHeader(
+    title: String,
+    onAddClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = (-0.4).sp,
+            color = MatteGlassTokens.CharcoalPrimary
+        )
+        if (onAddClick != null) {
+            Surface(
+                shape = CircleShape,
+                color = MatteGlassTokens.HeaderPillBg,
+                border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+                shadowElevation = 0.dp,
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .clickable { onAddClick() }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add Server",
+                        tint = MatteGlassTokens.CharcoalPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun UnifiedMediaTopBar(
+    searchQuery: String,
+    searchPlaceholder: String,
+    onSearchQueryChange: (String) -> Unit,
+    categories: List<String>,
+    selectedCategory: String,
+    onSelectCategory: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    var lastNonFavCategory by remember { mutableStateOf("") }
+
+    LaunchedEffect(selectedCategory) {
+        if (selectedCategory.isNotBlank() && selectedCategory != "Favorites") {
+            lastNonFavCategory = selectedCategory
+        }
+    }
+
+    val isFavorites = selectedCategory == "Favorites"
+    val displayCategory = when {
+        selectedCategory.isBlank() -> "Category"
+        selectedCategory == "Favorites" -> "Favorites"
+        else -> selectedCategory
     }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(0.58f)
-            .clip(shape)
-            .background(placeholderBrush)
-            .border(1.dp, MatteGlassTokens.NeutralBorder, shape)
-            .clickable(onClick = onClick)
+            .statusBarsPadding()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        if (!imageUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize()
-            )
-        }
-
-        // Subtle 1dp inner white glass frame
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .padding(1.dp)
-                .border(1.dp, MatteGlassTokens.CardInnerEdge, RoundedCornerShape(3.dp))
-        )
-
-        // Top-right translucent circular action icons + quick menu
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MatteGlassTokens.HeaderPillBg,
+            border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+            shadowElevation = 0.dp,
+            modifier = Modifier.fillMaxWidth().height(46.dp)
         ) {
-            CardTopCircleIcon(
-                icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                contentDescription = "Favorite",
-                onClick = onFavoriteClick
-            )
-            Box {
-                CardTopCircleIcon(
-                    icon = Icons.Default.MoreHoriz,
-                    contentDescription = "More",
-                    onClick = { showMenu = true }
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Search",
+                    tint = MatteGlassTokens.CharcoalMuted,
+                    modifier = Modifier.size(18.dp)
                 )
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                    containerColor = MatteGlassTokens.CanvasWhite
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Details", color = MatteGlassTokens.CharcoalPrimary) },
-                        onClick = {
-                            showMenu = false
-                            onClick()
-                        }
+                Spacer(Modifier.width(8.dp))
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (searchQuery.isEmpty()) {
+                        Text(
+                            text = searchPlaceholder,
+                            fontSize = 14.sp,
+                            color = MatteGlassTokens.CharcoalMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        singleLine = true,
+                        textStyle = TextStyle(fontSize = 14.sp, color = MatteGlassTokens.CharcoalPrimary),
+                        cursorBrush = SolidColor(MatteGlassTokens.CharcoalPrimary),
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    DropdownMenuItem(
-                        text = { Text("Play Now", color = MatteGlassTokens.CharcoalPrimary) },
-                        onClick = {
-                            showMenu = false
-                            onPlayClick()
-                        }
+                }
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { onSearchQueryChange("") }, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear search",
+                            tint = MatteGlassTokens.CharcoalMuted,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                if (categories.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 6.dp)
+                            .width(1.dp).height(22.dp)
+                            .background(MatteGlassTokens.GlassNavBorder)
                     )
-                    DropdownMenuItem(
-                        text = {
+                    Box {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { menuExpanded = true }
+                                .padding(horizontal = 6.dp, vertical = 6.dp)
+                                .widthIn(max = 128.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                if (isFavorite) "Remove Favorite" else "Add to Favorites",
-                                color = MatteGlassTokens.CharcoalPrimary
+                                text = displayCategory,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MatteGlassTokens.CharcoalPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
                             )
-                        },
-                        onClick = {
-                            showMenu = false
-                            onFavoriteClick()
+                            Spacer(Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Categories",
+                                tint = MatteGlassTokens.CharcoalPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
+
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                            modifier = Modifier
+                                .background(MatteGlassTokens.CanvasWhite)
+                                .widthIn(min = 190.dp, max = 280.dp)
+                                .heightIn(max = 420.dp)
+                        ) {
+                            categories.forEach { cat ->
+                                val active = cat == selectedCategory
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = cat,
+                                                fontSize = 13.sp,
+                                                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                                color = MatteGlassTokens.CharcoalPrimary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            if (active) {
+                                                Spacer(Modifier.width(8.dp))
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = MatteGlassTokens.CharcoalPrimary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onSelectCategory(cat)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .width(1.dp).height(22.dp)
+                        .background(MatteGlassTokens.GlassNavBorder)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(if (isFavorites) MatteGlassTokens.CharcoalPrimary else Color.Transparent)
+                        .clickable {
+                            if (isFavorites) {
+                                val fallback = lastNonFavCategory.ifBlank {
+                                    categories.firstOrNull { it != "All" && it != "Favorites" }
+                                        ?: categories.firstOrNull() ?: "All"
+                                }
+                                onSelectCategory(fallback)
+                            } else {
+                                onSelectCategory("Favorites")
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isFavorites) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = "Favorites",
+                        tint = if (isFavorites) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
         }
+    }
+}
 
-        // Bottom smooth dark scrim + title, subtitle, and metadata row
-        Column(
+@Composable
+fun PosterMediaCard(
+    item: MediaItem,
+    isFavorite: Boolean,
+    onCardClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
+    onPlayClick: () -> Unit,
+    isLarge: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val cardShape = RoundedCornerShape(6.dp)
+    val badgeText = remember(item.badge, item.contentType) {
+        val raw = item.badge.trim()
+        when {
+            raw.isNotBlank() && raw != "0" && raw != "0.0" -> {
+                if (raw.startsWith("★") || raw.equals("SERIES", true) || raw.equals("LIVE", true)) raw
+                else "★ $raw"
+            }
+            item.contentType == ContentType.SERIES -> "SERIES"
+            else -> ""
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .clip(cardShape)
+            .background(Brush.verticalGradient(listOf(Color(0xFF27272A), Color(0xFF18181B))))
+            .border(BorderStroke(1.dp, Color(0x1F000000)), cardShape)
+            .clickable { onCardClick() }
+    ) {
+        if (!item.posterUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = item.posterUrl,
+                contentDescription = item.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .fillMaxHeight(0.56f)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color(0xA618181B),
-                            Color(0xEB18181B)
-                        )
+                        colors = listOf(Color.Transparent, Color(0x9909090B), Color(0xEA09090B))
                     )
                 )
-                .padding(start = 10.dp, end = 10.dp, top = 32.dp, bottom = 10.dp)
+        )
+
+        Row(
+            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CardGlassCircleIcon(
+                icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                contentDescription = "Favorite",
+                onClick = onFavoriteClick
+            )
+            CardGlassCircleIcon(
+                icon = Icons.Default.MoreHoriz,
+                contentDescription = "Details",
+                onClick = onCardClick
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 10.dp)
         ) {
             Text(
-                text = title,
-                fontSize = 15.sp,
+                text = item.name,
+                fontSize = if (isLarge) 17.sp else 14.sp,
+                lineHeight = if (isLarge) 21.sp else 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(3.dp))
-            Text(
-                text = subtitle,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                color = Color.White.copy(alpha = 0.80f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            if (item.group.isNotBlank()) {
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = item.group,
+                    fontSize = if (isLarge) 12.sp else 11.sp,
+                    color = Color.White.copy(alpha = 0.78f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    if (showLiveDot) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(MatteGlassTokens.NotificationDot)
-                        )
-                    }
-                    Text(
-                        text = badgeText.ifEmpty { "HD" },
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White.copy(alpha = 0.90f)
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.16f))
-                        .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
-                        .clickable(onClick = onPlayClick),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Play Now",
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+                Text(
+                    text = badgeText,
+                    fontSize = if (isLarge) 12.sp else 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White.copy(alpha = 0.92f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                CardGlassCircleIcon(
+                    icon = Icons.Default.PlayArrow,
+                    contentDescription = "Play",
+                    onClick = onPlayClick
+                )
             }
         }
     }
 }
 
 @Composable
-private fun CardTopCircleIcon(
+private fun CardGlassCircleIcon(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
-            .size(28.dp)
+            .size(32.dp)
             .clip(CircleShape)
-            .background(Color(0x6618181B))
-            .border(1.dp, Color.White.copy(alpha = 0.30f), CircleShape)
-            .clickable(onClick = onClick),
+            .background(Color(0x8818181B))
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.30f)), CircleShape)
+            .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = Color.White,
-            modifier = Modifier.size(15.dp)
+            modifier = Modifier.size(17.dp)
         )
     }
-}
-
-@Composable
-fun AddPlaylistDialog(
-    initialHost: String,
-    initialUser: String,
-    initialPass: String,
-    initialM3u: String,
-    onDismiss: () -> Unit,
-    onLoadXtream: (String, String, String) -> Unit,
-    onLoadM3u: (String) -> Unit
-) {
-    var mode by remember { mutableIntStateOf(0) }
-    var host by remember { mutableStateOf(initialHost) }
-    var user by remember { mutableStateOf(initialUser) }
-    var pass by remember { mutableStateOf(initialPass) }
-    var m3uUrl by remember { mutableStateOf(initialM3u) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = MatteGlassTokens.CanvasWhite,
-        title = {
-            Text(
-                text = "Add Playlist",
-                fontWeight = FontWeight.Bold,
-                color = MatteGlassTokens.CharcoalPrimary
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = mode == 0,
-                        onClick = { mode = 0 },
-                        label = { Text("Xtream Codes") }
-                    )
-                    FilterChip(
-                        selected = mode == 1,
-                        onClick = { mode = 1 },
-                        label = { Text("M3U URL") }
-                    )
-                }
-                if (mode == 0) {
-                    OutlinedTextField(
-                        value = host,
-                        onValueChange = { host = it },
-                        label = { Text("Server URL (http://...)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = user,
-                        onValueChange = { user = it },
-                        label = { Text("Username") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = pass,
-                        onValueChange = { pass = it },
-                        label = { Text("Password") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    OutlinedTextField(
-                        value = m3uUrl,
-                        onValueChange = { m3uUrl = it },
-                        label = { Text("M3U / M3U8 URL") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (mode == 0 && host.isNotBlank() && user.isNotBlank() && pass.isNotBlank()) {
-                        onLoadXtream(host, user, pass)
-                    } else if (mode == 1 && m3uUrl.isNotBlank()) {
-                        onLoadM3u(m3uUrl)
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MatteGlassTokens.CharcoalPrimary,
-                    contentColor = MatteGlassTokens.CanvasWhite
-                )
-            ) {
-                Text("Load")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = MatteGlassTokens.CharcoalMuted)
-            }
-        }
-    )
 }

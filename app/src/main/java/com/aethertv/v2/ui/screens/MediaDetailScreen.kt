@@ -63,16 +63,12 @@ fun MediaDetailScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(MatteGlassTokens.CanvasWhite),
-        contentPadding = PaddingValues(bottom = 112.dp)
+            .background(MatteGlassTokens.CanvasWhite)
+            .navigationBarsPadding(),
+        contentPadding = PaddingValues(bottom = 36.dp)
     ) {
-        // Hero Poster with smooth fade into pure white canvas
         item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(440.dp)
-            ) {
+            Box(modifier = Modifier.fillMaxWidth().height(440.dp)) {
                 Box(
                     modifier = Modifier
                         .matchParentSize()
@@ -92,7 +88,18 @@ fun MediaDetailScreen(
                     )
                 }
 
-                // Bottom fade into pure white canvas
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(84.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.White.copy(alpha = 0.55f), Color.Transparent)
+                            )
+                        )
+                )
+
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -102,14 +109,13 @@ fun MediaDetailScreen(
                             Brush.verticalGradient(
                                 colors = listOf(
                                     Color.Transparent,
-                                    MatteGlassTokens.CanvasWhite.copy(alpha = 0.75f),
+                                    MatteGlassTokens.CanvasWhite.copy(alpha = 0.78f),
                                     MatteGlassTokens.CanvasWhite
                                 )
                             )
                         )
                 )
 
-                // Top floating frosted Back & Favorite buttons
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -130,7 +136,6 @@ fun MediaDetailScreen(
                     )
                 }
 
-                // Centered Title overlapping the bottom fade
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -152,31 +157,21 @@ fun MediaDetailScreen(
             }
         }
 
-        // Metadata pills, genre line, Watch Now + Download CTAs, and unboxed overview
         item {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Spacer(Modifier.height(10.dp))
 
                 val pills = buildList {
                     add(item.group.ifBlank { item.contentType.name })
-                    if (detailInfo.releaseYear.isNotBlank()) {
-                        add(detailInfo.releaseYear)
-                    }
+                    if (detailInfo.releaseYear.isNotBlank()) add(detailInfo.releaseYear)
                     val ratingText = detailInfo.rating.ifBlank { item.badge }
-                    if (ratingText.isNotBlank() && ratingText != "0") {
-                        add(
-                            if (ratingText.startsWith("★") || ratingText == "LIVE") ratingText
-                            else "★ $ratingText"
-                        )
+                    if (ratingText.isNotBlank() && ratingText != "0" && ratingText != "0.0") {
+                        add(if (ratingText.startsWith("★") || ratingText == "LIVE") ratingText else "★ $ratingText")
                     }
-                    if (detailInfo.duration.isNotBlank()) {
-                        add(detailInfo.duration)
-                    }
+                    if (detailInfo.duration.isNotBlank()) add(detailInfo.duration)
                 }
 
                 LazyRow(
@@ -184,14 +179,12 @@ fun MediaDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(pills) { pillText ->
-                        DetailPill(text = pillText)
-                    }
+                    items(pills) { pillText -> DetailPill(text = pillText) }
                 }
 
                 val metaLine = buildList {
                     if (detailInfo.genre.isNotBlank()) add(detailInfo.genre)
-                    else add(item.group)
+                    else if (item.group.isNotBlank()) add(item.group)
                 }.joinToString(" • ")
 
                 if (metaLine.isNotBlank()) {
@@ -208,9 +201,8 @@ fun MediaDetailScreen(
 
                 Spacer(Modifier.height(18.dp))
 
-                // Primary Watch Now CTA (+ Download button for movies)
-                val ctaLabel = if (item.contentType == ContentType.SERIES) {
-                    if (episodes.isNotEmpty()) "Play First Episode" else "Watch Now"
+                val ctaLabel = if (item.contentType == ContentType.SERIES && episodes.isNotEmpty()) {
+                    "Play First Episode"
                 } else {
                     "Watch Now"
                 }
@@ -241,19 +233,9 @@ fun MediaDetailScreen(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = MatteGlassTokens.CanvasWhite,
-                                modifier = Modifier.size(22.dp)
-                            )
+                            Icon(Icons.Default.PlayArrow, null, tint = MatteGlassTokens.CanvasWhite, modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = ctaLabel,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MatteGlassTokens.CanvasWhite
-                            )
+                            Text(ctaLabel, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CanvasWhite)
                         }
                     }
 
@@ -273,19 +255,9 @@ fun MediaDetailScreen(
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Download,
-                                    contentDescription = "Download",
-                                    tint = MatteGlassTokens.CharcoalPrimary,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                Icon(Icons.Default.Download, "Download", tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = "Download",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MatteGlassTokens.CharcoalPrimary
-                                )
+                                Text("Download", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary)
                             }
                         }
                     }
@@ -313,7 +285,6 @@ fun MediaDetailScreen(
             }
         }
 
-        // Episodes section for Series
         if (item.contentType == ContentType.SERIES && episodes.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(22.dp))
@@ -337,9 +308,7 @@ fun MediaDetailScreen(
                                 color = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.HeaderPillBg,
                                 border = if (selected) null else BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
                                 shadowElevation = 0.dp,
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .clickable { selectedSeason = season }
+                                modifier = Modifier.clip(CircleShape).clickable { selectedSeason = season }
                             ) {
                                 Text(
                                     text = season,
@@ -373,36 +342,13 @@ fun MediaDetailScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = ep.title,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MatteGlassTokens.CharcoalPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = ep.season,
-                                fontSize = 12.sp,
-                                color = MatteGlassTokens.CharcoalMuted
-                            )
+                            Text(ep.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(ep.season, fontSize = 12.sp, color = MatteGlassTokens.CharcoalMuted)
                         }
                         IconButton(onClick = { onDownloadEpisode(ep) }) {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = "Download episode",
-                                tint = MatteGlassTokens.CharcoalAction,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            Icon(Icons.Default.Download, "Download episode", tint = MatteGlassTokens.CharcoalAction, modifier = Modifier.size(20.dp))
                         }
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Play episode",
-                            tint = MatteGlassTokens.CharcoalAction,
-                            modifier = Modifier
-                                .padding(end = 6.dp)
-                                .size(20.dp)
-                        )
+                        Icon(Icons.Default.PlayArrow, "Play episode", tint = MatteGlassTokens.CharcoalAction, modifier = Modifier.padding(end = 6.dp).size(20.dp))
                     }
                 }
             }

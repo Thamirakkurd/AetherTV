@@ -48,7 +48,7 @@ import com.aethertv.v2.data.ServerStore
 import com.aethertv.v2.data.XtreamClient
 import com.aethertv.v2.ui.components.AddPlaylistDialog
 import com.aethertv.v2.ui.components.FloatingGlassNavBar
-import com.aethertv.v2.ui.components.GlassTopHeader
+import com.aethertv.v2.ui.screens.LiveTvScreen
 import com.aethertv.v2.ui.components.NavTabItem
 import com.aethertv.v2.ui.screens.HomeScreen
 import com.aethertv.v2.ui.screens.MediaDetailScreen
@@ -743,49 +743,6 @@ private fun AetherV2App(
             )
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
-                val activeTabCategories = remember(selectedTab, liveCategories, vodCategories, seriesCategories) {
-                    when (selectedTab) {
-                        1 -> listOf("All", "Favorites") + liveCategories.map { it.name }
-                        2 -> listOf("All", "Favorites") + vodCategories.map { it.name }
-                        3 -> listOf("All", "Favorites") + seriesCategories.map { it.name }
-                        else -> emptyList()
-                    }
-                }
-                val activeTabSelectedCat = when (selectedTab) {
-                    1 -> selectedLiveCat
-                    2 -> selectedVodCat
-                    3 -> selectedSeriesCat
-                    else -> ""
-                }
-
-                GlassTopHeader(
-                    title = tabs[selectedTab].label,
-                    categories = activeTabCategories,
-                    selectedCategory = activeTabSelectedCat,
-                    onSelectCategory = { cat ->
-                        if (cat == "All") {
-                            confirmAllTab = selectedTab
-                        } else {
-                            if (selectedTab == 1) loadLiveCategory(cat, forceNetwork = false)
-                            if (selectedTab == 2) loadVodCategory(cat, forceNetwork = false)
-                            if (selectedTab == 3) loadSeriesCategory(cat, forceNetwork = false)
-                        }
-                    },
-                    onSearchClick = { showSearch = !showSearch },
-                    onAddClick = { showAddDialog = true }
-                )
-
-
-
-                statusMessage?.let { msg ->
-                    Text(
-                        text = msg,
-                        fontSize = 12.sp,
-                        color = if (msg.contains("error", ignoreCase = true)) MatteGlassTokens.NotificationDot else MatteGlassTokens.CharcoalMuted,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp)
-                    )
-                }
-
                 when (selectedTab) {
                     0 -> {
                         val movieAndSeriesFavs = remember(favorites) {
@@ -815,25 +772,21 @@ private fun AetherV2App(
                             if (searchQuery.isBlank()) source
                             else source.filter { it.name.contains(searchQuery, ignoreCase = true) }
                         }
-                        MediaGridScreen(
+                        LiveTvScreen(
                             items = shown,
                             categories = catNames,
                             selectedCategory = selectedLiveCat,
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
-                            emptyMessage = if (playlistMode.isBlank()) "Tap + to add your server" else "No live channels in this category",
-                            showSearchInRow = showSearch,
+                            emptyMessage = if (playlistMode.isBlank()) "Add a server from Home or Settings to watch Live TV" else "No live channels in this category",
                             searchQuery = searchQuery,
-                            searchPlaceholder = "Search live...",
                             onSearchQueryChange = { searchQuery = it },
-                            onCloseSearch = { searchQuery = ""; showSearch = false },
                             onSelectCategory = { cat ->
                                 if (cat == "All") confirmAllTab = 1
                                 else loadLiveCategory(cat, forceNetwork = false)
                             },
-                            onItemClick = { openDetail(it) },
-                            onFavoriteClick = { toggleFavorite(it) },
-                            onPlayClick = { playItem(it) }
+                            onPlayClick = { playItem(it) },
+                            onFavoriteClick = { toggleFavorite(it) }
                         )
                     }
                     2 -> {
@@ -856,11 +809,9 @@ private fun AetherV2App(
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes server for Movies" else "No movies in this category",
-                            showSearchInRow = showSearch,
                             searchQuery = searchQuery,
                             searchPlaceholder = "Search movies...",
                             onSearchQueryChange = { searchQuery = it },
-                            onCloseSearch = { searchQuery = ""; showSearch = false },
                             onSelectCategory = { cat ->
                                 if (cat == "All") confirmAllTab = 2
                                 else loadVodCategory(cat, forceNetwork = false)
@@ -890,11 +841,9 @@ private fun AetherV2App(
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes server for Series" else "No series in this category",
-                            showSearchInRow = showSearch,
                             searchQuery = searchQuery,
                             searchPlaceholder = "Search series...",
                             onSearchQueryChange = { searchQuery = it },
-                            onCloseSearch = { searchQuery = ""; showSearch = false },
                             onSelectCategory = { cat ->
                                 if (cat == "All") confirmAllTab = 3
                                 else loadSeriesCategory(cat, forceNetwork = false)
@@ -912,9 +861,7 @@ private fun AetherV2App(
                             downloadedFiles = downloadedFiles,
                             favoritesCount = favorites.size,
                             recentCount = recents.size,
-                            onSelectServer = { srv ->
-                                persistServers(servers, srv.id)
-                            },
+                            onSelectServer = { srv -> persistServers(servers, srv.id) },
                             onDeleteServer = { srv ->
                                 val remaining = servers.filterNot { it.id == srv.id }
                                 val nextId = if (srv.id == activeServerId) remaining.firstOrNull()?.id ?: "" else activeServerId
@@ -963,22 +910,40 @@ private fun AetherV2App(
                     }
                 }
             }
-        }
 
-        FloatingGlassNavBar(
-            items = tabs,
-            selectedIndex = selectedTab,
-            onSelect = { idx ->
-                selectedDetailItem = null
-                selectedTab = idx
-                searchQuery = ""
-                if (idx == 1) ensureLiveCategories(forceNetwork = false)
-                if (idx == 2) ensureVodCategories(forceNetwork = false)
-                if (idx == 3) ensureSeriesCategories(forceNetwork = false)
-                if (idx == 4) downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
-            },
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
+            statusMessage?.let { msg ->
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 84.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xE6FFFFFF))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = msg,
+                        fontSize = 12.sp,
+                        color = if (msg.contains("error", ignoreCase = true)) MatteGlassTokens.NotificationDot else MatteGlassTokens.CharcoalMuted
+                    )
+                }
+            }
+
+            FloatingGlassNavBar(
+                items = tabs,
+                selectedIndex = selectedTab,
+                onSelect = { idx ->
+                    selectedDetailItem = null
+                    selectedTab = idx
+                    searchQuery = ""
+                    if (idx == 1) ensureLiveCategories(forceNetwork = false)
+                    if (idx == 2) ensureVodCategories(forceNetwork = false)
+                    if (idx == 3) ensureSeriesCategories(forceNetwork = false)
+                    if (idx == 4) downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
     }
 
     // Confirmation Prompt when tapping "All"
