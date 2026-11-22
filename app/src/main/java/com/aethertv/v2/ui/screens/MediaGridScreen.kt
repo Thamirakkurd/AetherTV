@@ -1,5 +1,10 @@
 package com.aethertv.v2.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -25,6 +30,7 @@ fun MediaGridScreen(
     favoriteIds: Set<String>,
     isLoading: Boolean,
     emptyMessage: String,
+    topBarVisible: Boolean = true,
     searchQuery: String = "",
     searchPlaceholder: String = "Search...",
     onSearchQueryChange: (String) -> Unit = {},
@@ -33,30 +39,13 @@ fun MediaGridScreen(
     onFavoriteClick: (MediaItem) -> Unit,
     onPlayClick: (MediaItem) -> Unit
 ) {
-    Column(
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MatteGlassTokens.CanvasWhite)
     ) {
-        UnifiedMediaTopBar(
-            searchQuery = searchQuery,
-            searchPlaceholder = searchPlaceholder,
-            onSearchQueryChange = onSearchQueryChange,
-            categories = categories,
-            selectedCategory = selectedCategory,
-            onSelectCategory = onSelectCategory
-        )
-
-        if (isLoading) {
-            LinearProgressIndicator(
-                color = MatteGlassTokens.CharcoalPrimary,
-                trackColor = MatteGlassTokens.HeaderPillBg,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-            )
-        }
-
         if (items.isEmpty() && !isLoading) {
             Box(
                 modifier = Modifier
@@ -74,9 +63,14 @@ fun MediaGridScreen(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 112.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(
+                    start = 6.dp,
+                    end = 6.dp,
+                    top = topInset + 64.dp,
+                    bottom = 112.dp
+                ),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(items, key = { it.id }) { item ->
                     PosterMediaCard(
@@ -88,7 +82,34 @@ fun MediaGridScreen(
                         isLarge = false,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(0.66f)
+                            .aspectRatio(0.56f)
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = topBarVisible,
+            enter = slideInVertically { -it } + fadeIn(),
+            exit = slideOutVertically { -it } + fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                UnifiedMediaTopBar(
+                    searchQuery = searchQuery,
+                    searchPlaceholder = searchPlaceholder,
+                    onSearchQueryChange = onSearchQueryChange,
+                    categories = categories,
+                    selectedCategory = selectedCategory,
+                    onSelectCategory = onSelectCategory
+                )
+                if (isLoading) {
+                    LinearProgressIndicator(
+                        color = MatteGlassTokens.CharcoalPrimary,
+                        trackColor = MatteGlassTokens.HeaderPillBg,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp)
                     )
                 }
             }

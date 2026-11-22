@@ -26,6 +26,15 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -708,10 +717,22 @@ private fun AetherV2App(
         return
     }
 
+    var barsVisible by remember { mutableStateOf(true) }
+    val hideBarsConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -12f) barsVisible = false
+                else if (available.y > 12f) barsVisible = true
+                return Offset.Zero
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MatteGlassTokens.CanvasWhite)
+            .nestedScroll(hideBarsConnection)
     ) {
         val activeDetail = selectedDetailItem
         if (activeDetail != null) {
@@ -778,6 +799,7 @@ private fun AetherV2App(
                             selectedCategory = selectedLiveCat,
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
+                            topBarVisible = barsVisible,
                             emptyMessage = if (playlistMode.isBlank()) "Add a server from Home or Settings to watch Live TV" else "No live channels in this category",
                             searchQuery = searchQuery,
                             onSearchQueryChange = { searchQuery = it },
@@ -808,6 +830,7 @@ private fun AetherV2App(
                             selectedCategory = selectedVodCat,
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
+                            topBarVisible = barsVisible,
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes server for Movies" else "No movies in this category",
                             searchQuery = searchQuery,
                             searchPlaceholder = "Search movies...",
@@ -840,6 +863,7 @@ private fun AetherV2App(
                             selectedCategory = selectedSeriesCat,
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
+                            topBarVisible = barsVisible,
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes server for Series" else "No series in this category",
                             searchQuery = searchQuery,
                             searchPlaceholder = "Search series...",
@@ -929,20 +953,27 @@ private fun AetherV2App(
                 }
             }
 
-            FloatingGlassNavBar(
-                items = tabs,
-                selectedIndex = selectedTab,
-                onSelect = { idx ->
-                    selectedDetailItem = null
-                    selectedTab = idx
-                    searchQuery = ""
-                    if (idx == 1) ensureLiveCategories(forceNetwork = false)
-                    if (idx == 2) ensureVodCategories(forceNetwork = false)
-                    if (idx == 3) ensureSeriesCategories(forceNetwork = false)
-                    if (idx == 4) downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
-                },
+            AnimatedVisibility(
+                visible = barsVisible,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter)
-            )
+            ) {
+                FloatingGlassNavBar(
+                    items = tabs,
+                    selectedIndex = selectedTab,
+                    onSelect = { idx ->
+                        selectedDetailItem = null
+                        selectedTab = idx
+                        searchQuery = ""
+                        barsVisible = true
+                        if (idx == 1) ensureLiveCategories(forceNetwork = false)
+                        if (idx == 2) ensureVodCategories(forceNetwork = false)
+                        if (idx == 3) ensureSeriesCategories(forceNetwork = false)
+                        if (idx == 4) downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
+                    }
+                )
+            }
         }
     }
 

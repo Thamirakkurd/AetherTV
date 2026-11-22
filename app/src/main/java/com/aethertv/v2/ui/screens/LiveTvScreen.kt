@@ -1,5 +1,10 @@
 package com.aethertv.v2.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,36 +40,20 @@ fun LiveTvScreen(
     favoriteIds: Set<String>,
     isLoading: Boolean,
     emptyMessage: String,
+    topBarVisible: Boolean = true,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onSelectCategory: (String) -> Unit,
     onPlayClick: (MediaItem) -> Unit,
     onFavoriteClick: (MediaItem) -> Unit
 ) {
-    Column(
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MatteGlassTokens.CanvasWhite)
     ) {
-        UnifiedMediaTopBar(
-            searchQuery = searchQuery,
-            searchPlaceholder = "Search live channels...",
-            onSearchQueryChange = onSearchQueryChange,
-            categories = categories,
-            selectedCategory = selectedCategory,
-            onSelectCategory = onSelectCategory
-        )
-
-        if (isLoading) {
-            LinearProgressIndicator(
-                color = MatteGlassTokens.CharcoalPrimary,
-                trackColor = MatteGlassTokens.HeaderPillBg,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-            )
-        }
-
         if (items.isEmpty() && !isLoading) {
             Box(
                 modifier = Modifier
@@ -81,7 +70,12 @@ fun LiveTvScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 112.dp),
+                contentPadding = PaddingValues(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top = topInset + 64.dp,
+                    bottom = 112.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(items, key = { it.id }) { channel ->
@@ -124,9 +118,7 @@ fun LiveTvScreen(
                                         model = channel.posterUrl,
                                         contentDescription = channel.name,
                                         contentScale = ContentScale.Fit,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(4.dp)
+                                        modifier = Modifier.fillMaxSize().padding(4.dp)
                                     )
                                 } else {
                                     Icon(
@@ -190,6 +182,33 @@ fun LiveTvScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = topBarVisible,
+            enter = slideInVertically { -it } + fadeIn(),
+            exit = slideOutVertically { -it } + fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                UnifiedMediaTopBar(
+                    searchQuery = searchQuery,
+                    searchPlaceholder = "Search live channels...",
+                    onSearchQueryChange = onSearchQueryChange,
+                    categories = categories,
+                    selectedCategory = selectedCategory,
+                    onSelectCategory = onSelectCategory
+                )
+                if (isLoading) {
+                    LinearProgressIndicator(
+                        color = MatteGlassTokens.CharcoalPrimary,
+                        trackColor = MatteGlassTokens.HeaderPillBg,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp)
+                    )
                 }
             }
         }
