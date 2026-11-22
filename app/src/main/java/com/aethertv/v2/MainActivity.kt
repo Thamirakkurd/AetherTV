@@ -997,7 +997,7 @@ private fun AetherV2App(
                 Text(
                     text = "Do you want to update and reload everything from the server, or use your saved cache?",
                     fontSize = 13.sp,
-                    color = MatteGlassTokens.CharcoalSecondary
+                    color = MatteGlassTokens.CharcoalMuted
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1058,7 +1058,7 @@ private fun AetherV2App(
                 Text(
                     text = dlTitle,
                     fontSize = 13.sp,
-                    color = MatteGlassTokens.CharcoalSecondary
+                    color = MatteGlassTokens.CharcoalMuted
                 )
                 Box(
                     modifier = Modifier

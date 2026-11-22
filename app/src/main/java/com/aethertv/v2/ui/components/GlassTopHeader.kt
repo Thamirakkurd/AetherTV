@@ -60,8 +60,8 @@ fun GlassTopHeader(
         Row(
             modifier = Modifier
                 .clip(CircleShape)
-                .background(MatteGlassTokens.GlassSurface)
-                .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), CircleShape)
+                .background(Color.White.copy(alpha = 0.85f))
+                .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), CircleShape)
                 .padding(horizontal = 6.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -88,7 +88,7 @@ fun GlassTopHeader(
                                 Text(
                                     text = cat,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalSecondary,
+                                    color = if (isSelected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted,
                                     fontSize = 14.sp
                                 )
                             },
@@ -152,7 +152,7 @@ fun GlassSearchStrip(
                 focusedContainerColor = Color.White,
                 unfocusedContainerColor = Color.White,
                 focusedBorderColor = MatteGlassTokens.CharcoalPrimary,
-                unfocusedBorderColor = MatteGlassTokens.GlassBorder
+                unfocusedBorderColor = Color.Black.copy(alpha = 0.12f)
             ),
             trailingIcon = {
                 Box(

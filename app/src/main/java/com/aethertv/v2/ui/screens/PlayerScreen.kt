@@ -549,7 +549,7 @@ fun PlayerScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Text Size", fontSize = 13.sp, color = MatteGlassTokens.CharcoalSecondary)
+                    Text("Text Size", fontSize = 13.sp, color = MatteGlassTokens.CharcoalMuted)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("S" to 0.8f, "M" to 1.0f, "L" to 1.3f).forEach { (label, scale) ->
                             val active = subtitleFontScale == scale
@@ -610,7 +610,7 @@ fun PlayerScreen(
                 }
 
                 if (embeddedTextGroups.isNotEmpty()) {
-                    Text("Stream Tracks", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalSecondary)
+                    Text("Stream Tracks", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalMuted)
                     embeddedTextGroups.forEachIndexed { idx, group ->
                         val fmt = group.getTrackFormat(0)
                         val trackLabel = fmt.label ?: fmt.language ?: "Track ${idx + 1}"
@@ -636,7 +636,7 @@ fun PlayerScreen(
                 }
 
                 // Online subtitle search
-                Text("Search Online Subtitles", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalSecondary)
+                Text("Search Online Subtitles", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalMuted)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("English" to "eng", "Arabic" to "ara", "Kurdish" to "kur").forEach { (name, code) ->
                         val selected = subLang == code
@@ -651,7 +651,7 @@ fun PlayerScreen(
                                 name,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (selected) Color.White else MatteGlassTokens.CharcoalSecondary
+                                color = if (selected) Color.White else MatteGlassTokens.CharcoalMuted
                             )
                         }
                     }

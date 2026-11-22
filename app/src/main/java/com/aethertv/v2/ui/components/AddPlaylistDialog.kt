@@ -83,7 +83,7 @@ fun AddPlaylistDialog(
                             text = label,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (selected) Color.White else MatteGlassTokens.CharcoalSecondary
+                            color = if (selected) Color.White else MatteGlassTokens.CharcoalMuted
                         )
                     }
                 }
@@ -133,7 +133,7 @@ fun AddPlaylistDialog(
                         .clickable { onDismiss() }
                         .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
-                    Text("Cancel", color = MatteGlassTokens.CharcoalSecondary, fontWeight = FontWeight.Medium)
+                    Text("Cancel", color = MatteGlassTokens.CharcoalMuted, fontWeight = FontWeight.Medium)
                 }
                 Spacer(Modifier.width(8.dp))
                 Box(

@@ -73,7 +73,7 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
                     .background(Color.White)
-                    .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), RoundedCornerShape(18.dp))
+                    .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), RoundedCornerShape(18.dp))
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -120,7 +120,7 @@ fun SettingsScreen(
                     Text(
                         text = "No servers added yet. Tap Add to configure one.",
                         fontSize = 13.sp,
-                        color = MatteGlassTokens.CharcoalSecondary
+                        color = MatteGlassTokens.CharcoalMuted
                     )
                 } else {
                     servers.forEach { srv ->
@@ -188,7 +188,7 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
                     .background(Color.White)
-                    .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), RoundedCornerShape(18.dp))
+                    .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), RoundedCornerShape(18.dp))
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -232,7 +232,7 @@ fun SettingsScreen(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
                         .background(Color.White)
-                        .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), RoundedCornerShape(18.dp))
+                        .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), RoundedCornerShape(18.dp))
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -294,7 +294,7 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
                     .background(Color.White)
-                    .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), RoundedCornerShape(18.dp))
+                    .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), RoundedCornerShape(18.dp))
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -307,7 +307,7 @@ fun SettingsScreen(
                 Text(
                     text = "Favorites: $favoritesCount  •  Recently Watched: $recentCount",
                     fontSize = 13.sp,
-                    color = MatteGlassTokens.CharcoalSecondary
+                    color = MatteGlassTokens.CharcoalMuted
                 )
                 Box(
                     modifier = Modifier
@@ -333,7 +333,7 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
                     .background(Color.White)
-                    .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), RoundedCornerShape(18.dp))
+                    .border(BorderStroke(1.dp, Color.Black.copy(alpha = 0.12f)), RoundedCornerShape(18.dp))
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -359,7 +359,7 @@ fun SettingsScreen(
                         Text(
                             text = "AetherTV v2 • Built with Kotlin & Compose",
                             fontSize = 12.sp,
-                            color = MatteGlassTokens.CharcoalSecondary
+                            color = MatteGlassTokens.CharcoalMuted
                         )
                     }
                 }

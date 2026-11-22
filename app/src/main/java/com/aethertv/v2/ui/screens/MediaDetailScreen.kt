@@ -52,6 +52,8 @@ fun MediaDetailScreen(
     onDownloadEpisode: (EpisodeItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val borderColor = Color.Black.copy(alpha = 0.12f)
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -102,7 +104,7 @@ fun MediaDetailScreen(
                             .size(40.dp)
                             .clip(CircleShape)
                             .background(Color.White.copy(alpha = 0.88f))
-                            .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), CircleShape)
+                            .border(BorderStroke(1.dp, borderColor), CircleShape)
                             .clickable(onClick = onBack),
                         contentAlignment = Alignment.Center
                     ) {
@@ -119,7 +121,7 @@ fun MediaDetailScreen(
                             .size(40.dp)
                             .clip(CircleShape)
                             .background(Color.White.copy(alpha = 0.88f))
-                            .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), CircleShape)
+                            .border(BorderStroke(1.dp, borderColor), CircleShape)
                             .clickable(onClick = onToggleFavorite),
                         contentAlignment = Alignment.Center
                     ) {
@@ -148,7 +150,7 @@ fun MediaDetailScreen(
                         .height(158.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color.White)
-                        .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), RoundedCornerShape(16.dp)),
+                        .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     if (!item.posterUrl.isNullOrBlank()) {
@@ -181,18 +183,17 @@ fun MediaDetailScreen(
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    val metaParts = listOfNotNull(
-                        detailInfo.year.takeIf { it.isNotBlank() },
-                        detailInfo.rating.takeIf { it.isNotBlank() }?.let { "★ $it" },
-                        detailInfo.duration.takeIf { it.isNotBlank() },
-                        item.group.takeIf { it.isNotBlank() }
-                    )
+                    val metaParts = buildList {
+                        if (detailInfo.rating.isNotBlank()) add("★ ${detailInfo.rating}")
+                        if (detailInfo.duration.isNotBlank()) add(detailInfo.duration)
+                        if (item.group.isNotBlank()) add(item.group)
+                    }
                     if (metaParts.isNotEmpty()) {
                         Text(
                             text = metaParts.joinToString("  •  "),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MatteGlassTokens.CharcoalSecondary
+                            color = MatteGlassTokens.CharcoalMuted
                         )
                     }
 
@@ -254,7 +255,7 @@ fun MediaDetailScreen(
                             .height(50.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(Color.White)
-                            .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), RoundedCornerShape(16.dp))
+                            .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(16.dp))
                             .clickable(onClick = onDownloadItem)
                             .padding(horizontal = 16.dp),
                         contentAlignment = Alignment.Center
@@ -306,7 +307,7 @@ fun MediaDetailScreen(
                         .padding(horizontal = 16.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color.White)
-                        .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), RoundedCornerShape(16.dp))
+                        .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(16.dp))
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -320,16 +321,8 @@ fun MediaDetailScreen(
                         text = detailInfo.plot,
                         fontSize = 13.sp,
                         lineHeight = 19.sp,
-                        color = MatteGlassTokens.CharcoalSecondary
+                        color = MatteGlassTokens.CharcoalMuted
                     )
-                    if (detailInfo.cast.isNotBlank()) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "Cast: ${detailInfo.cast}",
-                            fontSize = 12.sp,
-                            color = MatteGlassTokens.CharcoalMuted
-                        )
-                    }
                 }
             }
         }
@@ -352,7 +345,7 @@ fun MediaDetailScreen(
                         .padding(horizontal = 16.dp, vertical = 4.dp)
                         .clip(RoundedCornerShape(14.dp))
                         .background(Color.White)
-                        .border(BorderStroke(1.dp, MatteGlassTokens.GlassBorder), RoundedCornerShape(14.dp))
+                        .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(14.dp))
                         .clickable { onEpisodeClick(ep) }
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
