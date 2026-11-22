@@ -12,8 +12,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -23,25 +27,41 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.aethertv.v2.data.ContentType
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 
 data class NavTabItem(
     val label: String,
-    val icon: ImageVector
+    val selectedIcon: ImageVector,
+    val unselectedIcon: ImageVector = selectedIcon
 )
+
+private val NavCoolSurface = Color(0xF5F4F6F9)
+private val NavCoolFieldBg = Color(0xFFE9ECF1)
+private val NavHairlineDivider = Color(0x20181B20)
+private val NavFieldShape = RoundedCornerShape(18.dp)
+private val CardShape = RoundedCornerShape(6.dp)
+private val CardBgBrush = Brush.verticalGradient(listOf(Color(0xFF27272A), Color(0xFF18181B)))
+private val CardScrimBrush = Brush.verticalGradient(
+    colors = listOf(Color.Transparent, Color(0x9909090B), Color(0xEA09090B))
+)
+private val CardBorderStroke = BorderStroke(1.dp, Color(0x1F000000))
+private val CardIconBorder = BorderStroke(1.dp, Color.White.copy(alpha = 0.30f))
 
 @Composable
 fun FloatingGlassNavBar(
@@ -50,56 +70,51 @@ fun FloatingGlassNavBar(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        shape = CircleShape,
-        color = MatteGlassTokens.NavGlassBg,
-        border = BorderStroke(1.dp, MatteGlassTokens.GlassNavBorder),
-        shadowElevation = 6.dp,
+    Column(
         modifier = modifier
-            .navigationBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 10.dp)
             .fillMaxWidth()
-            .height(62.dp)
+            .shadow(
+                elevation = 6.dp,
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x22000000)
+            )
+            .background(NavCoolSurface)
     ) {
+        HorizontalDivider(thickness = 0.75.dp, color = NavHairlineDivider)
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 6.dp, vertical = 5.dp),
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .height(56.dp)
+                .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
             items.forEachIndexed { index, item ->
                 val selected = index == selectedIndex
+                val tint = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(CircleShape)
-                        .background(
-                            if (selected) MatteGlassTokens.ActivePillBg else Color.Transparent
-                        )
-                        .then(
-                            if (selected) Modifier.border(
-                                BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-                                CircleShape
-                            ) else Modifier
-                        )
-                        .clickable { onSelect(index) },
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onSelect(index) }
+                        .padding(vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     Icon(
-                        imageVector = item.icon,
+                        imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
                         contentDescription = item.label,
-                        tint = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted,
-                        modifier = Modifier.size(21.dp)
+                        tint = tint,
+                        modifier = Modifier.size(if (selected) 23.dp else 21.dp)
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = item.label,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted,
+                        color = tint,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -143,42 +158,46 @@ fun SimpleScreenHeader(
     onAddClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .background(NavCoolSurface)
     ) {
-        Text(
-            text = title,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.4).sp,
-            color = MatteGlassTokens.CharcoalPrimary
-        )
-        if (onAddClick != null) {
-            Surface(
-                shape = CircleShape,
-                color = MatteGlassTokens.HeaderPillBg,
-                border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-                shadowElevation = 0.dp,
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .clickable { onAddClick() }
-            ) {
-                Box(contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.4).sp,
+                color = MatteGlassTokens.CharcoalPrimary
+            )
+            if (onAddClick != null) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(NavCoolFieldBg)
+                        .border(0.75.dp, NavHairlineDivider, CircleShape)
+                        .clickable { onAddClick() },
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Add Server",
                         tint = MatteGlassTokens.CharcoalPrimary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
         }
+        HorizontalDivider(thickness = 0.75.dp, color = NavHairlineDivider)
     }
 }
 
@@ -203,40 +222,47 @@ fun UnifiedMediaTopBar(
 
     val isFavorites = selectedCategory == "Favorites"
     val displayCategory = when {
-        selectedCategory.isBlank() -> "Category"
+        selectedCategory.isBlank() -> "All"
         selectedCategory == "Favorites" -> "Favorites"
         else -> selectedCategory
     }
 
-    Box(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .background(NavCoolSurface)
     ) {
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = MatteGlassTokens.HeaderPillBg,
-            border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-            shadowElevation = 0.dp,
-            modifier = Modifier.fillMaxWidth().height(46.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(54.dp)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(38.dp)
+                    .clip(NavFieldShape)
+                    .background(NavCoolFieldBg)
+                    .border(0.75.dp, NavHairlineDivider, NavFieldShape)
+                    .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = "Search",
                     tint = MatteGlassTokens.CharcoalMuted,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(17.dp)
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(7.dp))
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     if (searchQuery.isEmpty()) {
                         Text(
                             text = searchPlaceholder,
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             color = MatteGlassTokens.CharcoalMuted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -246,136 +272,134 @@ fun UnifiedMediaTopBar(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
                         singleLine = true,
-                        textStyle = TextStyle(fontSize = 14.sp, color = MatteGlassTokens.CharcoalPrimary),
+                        textStyle = TextStyle(fontSize = 13.sp, color = MatteGlassTokens.CharcoalPrimary),
                         cursorBrush = SolidColor(MatteGlassTokens.CharcoalPrimary),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
                 if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { onSearchQueryChange("") }, modifier = Modifier.size(28.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Clear search",
-                            tint = MatteGlassTokens.CharcoalMuted,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                if (categories.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 6.dp)
-                            .width(1.dp).height(22.dp)
-                            .background(MatteGlassTokens.GlassNavBorder)
-                    )
-                    Box {
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { menuExpanded = true }
-                                .padding(horizontal = 6.dp, vertical = 6.dp)
-                                .widthIn(max = 128.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = displayCategory,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MatteGlassTokens.CharcoalPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-                            Spacer(Modifier.width(2.dp))
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = "Categories",
-                                tint = MatteGlassTokens.CharcoalPrimary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                            modifier = Modifier
-                                .background(MatteGlassTokens.CanvasWhite)
-                                .widthIn(min = 190.dp, max = 280.dp)
-                                .heightIn(max = 420.dp)
-                        ) {
-                            categories.forEach { cat ->
-                                val active = cat == selectedCategory
-                                DropdownMenuItem(
-                                    text = {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = cat,
-                                                fontSize = 13.sp,
-                                                fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                                color = MatteGlassTokens.CharcoalPrimary,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            if (active) {
-                                                Spacer(Modifier.width(8.dp))
-                                                Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = null,
-                                                    tint = MatteGlassTokens.CharcoalPrimary,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
-                                        }
-                                    },
-                                    onClick = {
-                                        menuExpanded = false
-                                        onSelectCategory(cat)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .width(1.dp).height(22.dp)
-                        .background(MatteGlassTokens.GlassNavBorder)
-                )
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(if (isFavorites) MatteGlassTokens.CharcoalPrimary else Color.Transparent)
-                        .clickable {
-                            if (isFavorites) {
-                                val fallback = lastNonFavCategory.ifBlank {
-                                    categories.firstOrNull { it != "All" && it != "Favorites" }
-                                        ?: categories.firstOrNull() ?: "All"
-                                }
-                                onSelectCategory(fallback)
-                            } else {
-                                onSelectCategory("Favorites")
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
                     Icon(
-                        imageVector = if (isFavorites) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = "Favorites",
-                        tint = if (isFavorites) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
-                        modifier = Modifier.size(18.dp)
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear search",
+                        tint = MatteGlassTokens.CharcoalMuted,
+                        modifier = Modifier
+                            .size(17.dp)
+                            .clip(CircleShape)
+                            .clickable { onSearchQueryChange("") }
                     )
                 }
             }
+
+            if (categories.isNotEmpty()) {
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .height(38.dp)
+                            .widthIn(max = 136.dp)
+                            .clip(NavFieldShape)
+                            .background(NavCoolFieldBg)
+                            .border(0.75.dp, NavHairlineDivider, NavFieldShape)
+                            .clickable { menuExpanded = true }
+                            .padding(horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = displayCategory,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MatteGlassTokens.CharcoalPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(Modifier.width(2.dp))
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Categories",
+                            tint = MatteGlassTokens.CharcoalPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                        modifier = Modifier
+                            .background(Color(0xFFF8F9FB))
+                            .widthIn(min = 190.dp, max = 280.dp)
+                            .heightIn(max = 420.dp)
+                    ) {
+                        categories.forEach { cat ->
+                            val active = cat == selectedCategory
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = cat,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                            color = MatteGlassTokens.CharcoalPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (active) {
+                                            Spacer(Modifier.width(8.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = MatteGlassTokens.CharcoalPrimary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onSelectCategory(cat)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(if (isFavorites) MatteGlassTokens.CharcoalPrimary else NavCoolFieldBg)
+                    .border(
+                        0.75.dp,
+                        if (isFavorites) MatteGlassTokens.CharcoalPrimary else NavHairlineDivider,
+                        CircleShape
+                    )
+                    .clickable {
+                        if (isFavorites) {
+                            val fallback = lastNonFavCategory.ifBlank {
+                                categories.firstOrNull { it != "All" && it != "Favorites" }
+                                    ?: categories.firstOrNull() ?: "All"
+                            }
+                            onSelectCategory(fallback)
+                        } else {
+                            onSelectCategory("Favorites")
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isFavorites) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = "Favorites",
+                    tint = if (isFavorites) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
+        HorizontalDivider(thickness = 0.75.dp, color = NavHairlineDivider)
     }
 }
 
@@ -386,15 +410,16 @@ fun PosterMediaCard(
     onCardClick: () -> Unit,
     onFavoriteClick: () -> Unit,
     onPlayClick: () -> Unit,
+    onMoreClick: () -> Unit = onCardClick,
     isLarge: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val cardShape = RoundedCornerShape(6.dp)
+    val context = LocalContext.current
     val badgeText = remember(item.badge, item.contentType) {
         val raw = item.badge.trim()
         when {
             raw.isNotBlank() && raw != "0" && raw != "0.0" -> {
-                if (raw.startsWith("★") || raw.equals("SERIES", true) || raw.equals("LIVE", true)) raw
+                if (raw.startsWith("★") || raw.equals("SERIES", true) || raw.equals("LIVE", true) || raw.equals("MOVIE", true)) raw
                 else "★ $raw"
             }
             item.contentType == ContentType.SERIES -> "SERIES"
@@ -402,16 +427,26 @@ fun PosterMediaCard(
         }
     }
 
+    val imageRequest = remember(item.posterUrl, isLarge) {
+        item.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
+            ImageRequest.Builder(context)
+                .data(url)
+                .crossfade(true)
+                .size(if (isLarge) 540 else 360, if (isLarge) 780 else 600)
+                .build()
+        }
+    }
+
     Box(
         modifier = modifier
-            .clip(cardShape)
-            .background(Brush.verticalGradient(listOf(Color(0xFF27272A), Color(0xFF18181B))))
-            .border(BorderStroke(1.dp, Color(0x1F000000)), cardShape)
+            .clip(CardShape)
+            .background(CardBgBrush)
+            .border(CardBorderStroke, CardShape)
             .clickable { onCardClick() }
     ) {
-        if (!item.posterUrl.isNullOrBlank()) {
+        if (imageRequest != null) {
             AsyncImage(
-                model = item.posterUrl,
+                model = imageRequest,
                 contentDescription = item.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -423,11 +458,7 @@ fun PosterMediaCard(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .fillMaxHeight(0.56f)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color(0x9909090B), Color(0xEA09090B))
-                    )
-                )
+                .background(CardScrimBrush)
         )
 
         Row(
@@ -442,8 +473,8 @@ fun PosterMediaCard(
             )
             CardGlassCircleIcon(
                 icon = Icons.Default.MoreHoriz,
-                contentDescription = "Details",
-                onClick = onCardClick
+                contentDescription = "More options",
+                onClick = onMoreClick
             )
         }
 
@@ -508,7 +539,7 @@ private fun CardGlassCircleIcon(
             .size(32.dp)
             .clip(CircleShape)
             .background(Color(0x8818181B))
-            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.30f)), CircleShape)
+            .border(CardIconBorder, CircleShape)
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
@@ -517,6 +548,178 @@ private fun CardGlassCircleIcon(
             contentDescription = contentDescription,
             tint = Color.White,
             modifier = Modifier.size(17.dp)
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MediaActionBottomSheet(
+    item: MediaItem,
+    isFavorite: Boolean,
+    onDismiss: () -> Unit,
+    onViewDetails: (() -> Unit)?,
+    onPlay: () -> Unit,
+    onOpenExternal: () -> Unit,
+    onDownloadBuiltIn: (() -> Unit)?,
+    onDownloadExternal: (() -> Unit)?,
+    onToggleFavorite: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFFF6F7F9),
+        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 18.dp)
+                .padding(bottom = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 48.dp, height = 64.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1E222A))
+                ) {
+                    if (!item.posterUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = item.posterUrl,
+                            contentDescription = item.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.name,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MatteGlassTokens.CharcoalPrimary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (item.group.isNotBlank()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = item.group,
+                            fontSize = 12.sp,
+                            color = MatteGlassTokens.CharcoalMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(thickness = 0.75.dp, color = NavHairlineDivider)
+            Spacer(Modifier.height(2.dp))
+
+            if (onViewDetails != null) {
+                ActionSheetRow(
+                    icon = Icons.Default.Info,
+                    label = "View Details",
+                    onClick = {
+                        onDismiss()
+                        onViewDetails()
+                    }
+                )
+            }
+
+            ActionSheetRow(
+                icon = Icons.Default.PlayArrow,
+                label = if (item.contentType == ContentType.SERIES) "Browse & Play" else "Play Now",
+                onClick = {
+                    onDismiss()
+                    onPlay()
+                }
+            )
+
+            if (item.contentType != ContentType.SERIES) {
+                ActionSheetRow(
+                    icon = Icons.Default.OpenInNew,
+                    label = "Open Externally",
+                    onClick = {
+                        onDismiss()
+                        onOpenExternal()
+                    }
+                )
+            }
+
+            if (onDownloadBuiltIn != null) {
+                ActionSheetRow(
+                    icon = Icons.Default.Download,
+                    label = "Download (Built-in)",
+                    onClick = {
+                        onDismiss()
+                        onDownloadBuiltIn()
+                    }
+                )
+            }
+
+            if (onDownloadExternal != null) {
+                ActionSheetRow(
+                    icon = Icons.Default.FileDownload,
+                    label = "Download Externally (1DM+ / ADM)",
+                    onClick = {
+                        onDismiss()
+                        onDownloadExternal()
+                    }
+                )
+            }
+
+            ActionSheetRow(
+                icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                label = if (isFavorite) "Remove from Favorites" else "Add to Favorites",
+                onClick = {
+                    onToggleFavorite()
+                    onDismiss()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActionSheetRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White)
+            .border(0.75.dp, NavHairlineDivider, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = MatteGlassTokens.CharcoalPrimary,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = MatteGlassTokens.CharcoalPrimary
         )
     }
 }

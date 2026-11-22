@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aethertv.v2.data.DownloadMode
@@ -47,6 +48,7 @@ fun SettingsScreen(
     downloadedFiles: List<File>,
     favoritesCount: Int,
     recentCount: Int,
+    extraBottomPadding: Dp = 0.dp,
     onSelectServer: (SavedServer) -> Unit,
     onDeleteServer: (SavedServer) -> Unit,
     onAddServerClick: () -> Unit,
@@ -58,6 +60,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Column(
         modifier = modifier
@@ -71,7 +74,7 @@ fun SettingsScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 112.dp),
+            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = navInset + 84.dp + extraBottomPadding),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
@@ -224,7 +227,7 @@ fun SettingsScreen(
                 SettingsSectionCard(title = "Downloaded Files (${downloadedFiles.size})") {
                     if (downloadedFiles.isEmpty()) {
                         Text(
-                            text = "No offline files found in Movies/AetherTV.",
+                            text = "No offline files found in Downloads/AetherTV.",
                             fontSize = 13.sp,
                             color = MatteGlassTokens.CharcoalMuted
                         )

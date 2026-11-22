@@ -8,13 +8,16 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aethertv.v2.data.MediaItem
@@ -30,16 +33,20 @@ fun MediaGridScreen(
     favoriteIds: Set<String>,
     isLoading: Boolean,
     emptyMessage: String,
+    gridState: LazyGridState = rememberLazyGridState(),
     topBarVisible: Boolean = true,
+    extraBottomPadding: Dp = 0.dp,
     searchQuery: String = "",
     searchPlaceholder: String = "Search...",
     onSearchQueryChange: (String) -> Unit = {},
     onSelectCategory: (String) -> Unit,
     onItemClick: (MediaItem) -> Unit,
     onFavoriteClick: (MediaItem) -> Unit,
-    onPlayClick: (MediaItem) -> Unit
+    onPlayClick: (MediaItem) -> Unit,
+    onMoreClick: (MediaItem) -> Unit = onItemClick
 ) {
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Box(
         modifier = Modifier
@@ -61,24 +68,26 @@ fun MediaGridScreen(
             }
         } else {
             LazyVerticalGrid(
+                state = gridState,
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = 6.dp,
                     end = 6.dp,
-                    top = topInset + 64.dp,
-                    bottom = 112.dp
+                    top = topInset + 60.dp,
+                    bottom = navInset + 84.dp + extraBottomPadding
                 ),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                items(items, key = { it.id }) { item ->
+                items(items, key = { it.id }, contentType = { "poster_card" }) { item ->
                     PosterMediaCard(
                         item = item,
                         isFavorite = favoriteIds.contains(item.id),
                         onCardClick = { onItemClick(item) },
                         onFavoriteClick = { onFavoriteClick(item) },
                         onPlayClick = { onPlayClick(item) },
+                        onMoreClick = { onMoreClick(item) },
                         isLarge = false,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -107,9 +116,7 @@ fun MediaGridScreen(
                     LinearProgressIndicator(
                         color = MatteGlassTokens.CharcoalPrimary,
                         trackColor = MatteGlassTokens.HeaderPillBg,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }

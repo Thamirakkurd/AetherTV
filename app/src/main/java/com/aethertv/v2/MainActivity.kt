@@ -14,9 +14,16 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -24,21 +31,21 @@ import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LiveTv
+import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -57,19 +64,20 @@ import com.aethertv.v2.data.ServerStore
 import com.aethertv.v2.data.XtreamClient
 import com.aethertv.v2.ui.components.AddPlaylistDialog
 import com.aethertv.v2.ui.components.FloatingGlassNavBar
-import com.aethertv.v2.ui.screens.LiveTvScreen
+import com.aethertv.v2.ui.components.MediaActionBottomSheet
 import com.aethertv.v2.ui.components.NavTabItem
 import com.aethertv.v2.ui.screens.HomeScreen
+import com.aethertv.v2.ui.screens.LiveTvScreen
 import com.aethertv.v2.ui.screens.MediaDetailScreen
 import com.aethertv.v2.ui.screens.MediaGridScreen
 import com.aethertv.v2.ui.screens.PlayerScreen
 import com.aethertv.v2.ui.screens.SettingsScreen
+import com.aethertv.v2.ui.screens.YouTubeLivePlayerOverlay
 import com.aethertv.v2.ui.theme.MatteGlassTheme
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -133,20 +141,26 @@ private fun AetherV2App(
 
     val tabs = remember {
         listOf(
-            NavTabItem("Home", Icons.Default.Home),
-            NavTabItem("Live", Icons.Default.LiveTv),
-            NavTabItem("Movies", Icons.Default.Movie),
-            NavTabItem("Series", Icons.Default.Tv),
-            NavTabItem("Settings", Icons.Default.Settings)
+            NavTabItem("Home", Icons.Filled.Home, Icons.Outlined.Home),
+            NavTabItem("Live", Icons.Filled.LiveTv, Icons.Outlined.LiveTv),
+            NavTabItem("Movies", Icons.Filled.Movie, Icons.Outlined.Movie),
+            NavTabItem("Series", Icons.Filled.Tv, Icons.Outlined.Tv),
+            NavTabItem("Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
         )
     }
 
+    // Hoisted scroll states so tab scroll position is preserved across detail screens, players & tab switches
+    val homeListState = rememberLazyListState()
+    val liveListState = rememberLazyListState()
+    val moviesGridState = rememberLazyGridState()
+    val seriesGridState = rememberLazyGridState()
+
     var selectedTab by remember { mutableIntStateOf(0) }
-    var showSearch by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
+    var barsVisible by remember { mutableStateOf(true) }
 
     // Migrate legacy single server into SavedServer list if needed
     val initialServers = remember {
@@ -186,7 +200,6 @@ private fun AetherV2App(
     val xtreamHost = activeServer?.host ?: ""
     val xtreamUser = activeServer?.user ?: ""
     val xtreamPass = activeServer?.pass ?: ""
-    val m3uUrl = activeServer?.m3uUrl ?: ""
     val playlistScopeKey = activeServer?.id ?: "none"
 
     // Download mode & offline files
@@ -196,11 +209,14 @@ private fun AetherV2App(
             try { DownloadMode.valueOf(savedName) } catch (_: Exception) { DownloadMode.ASK }
         )
     }
-    var pendingDownloadTarget by remember { mutableStateOf<Pair<String, String>?>(null) } // url to title
+    var pendingDownloadTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
     var downloadedFiles by remember { mutableStateOf(MediaDownloadHelper.listDownloadedFiles()) }
 
+    // Card ••• Action Sheet target
+    var cardMenuTarget by remember { mutableStateOf<MediaItem?>(null) }
+
     // Confirmation prompt for "All" category
-    var confirmAllTab by remember { mutableStateOf<Int?>(null) } // 1=Live, 2=Movies, 3=Series
+    var confirmAllTab by remember { mutableStateOf<Int?>(null) }
 
     // Catalog state + in-memory cache for "All"
     var liveCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
@@ -224,18 +240,96 @@ private fun AetherV2App(
     var recents by remember { mutableStateOf(XtreamClient.decodeItems(prefs.getString("recents_json", null))) }
     val favoriteIds = remember(favorites) { favorites.map { it.id }.toSet() }
 
-    // Media Detail & Built-in Player state
+    // Media Detail, VOD Player, and Persistent YouTube Live TV Player state
     var selectedDetailItem by remember { mutableStateOf<MediaItem?>(null) }
     var detailInfo by remember { mutableStateOf(MediaDetailInfo()) }
     var detailEpisodes by remember { mutableStateOf<List<EpisodeItem>>(emptyList()) }
     var loadingDetail by remember { mutableStateOf(false) }
-    var activePlayerItem by remember { mutableStateOf<MediaItem?>(null) }
 
-    BackHandler(enabled = activePlayerItem != null || selectedDetailItem != null) {
-        if (activePlayerItem != null) {
-            activePlayerItem = null
-        } else {
-            selectedDetailItem = null
+    var activeVodItem by remember { mutableStateOf<MediaItem?>(null) }
+    var activeLiveItem by remember { mutableStateOf<MediaItem?>(null) }
+    var isLiveMiniPlayer by remember { mutableStateOf(false) }
+
+    // Off-main-thread hoisted filtered lists so returning from detail screens keeps data & scroll intact
+    val liveCatNames = remember(liveCategories) {
+        listOf("All", "Favorites") + liveCategories.map { it.name }
+    }
+    val vodCatNames = remember(vodCategories) {
+        listOf("All", "Favorites") + vodCategories.map { it.name }
+    }
+    val seriesCatNames = remember(seriesCategories) {
+        listOf("All", "Favorites") + seriesCategories.map { it.name }
+    }
+
+    val shownLive by produceState(
+        initialValue = emptyList<MediaItem>(),
+        liveItems, selectedLiveCat, searchQuery, favorites
+    ) {
+        value = withContext(Dispatchers.Default) {
+            val source = if (selectedLiveCat == "Favorites") {
+                favorites.filter { it.contentType == ContentType.LIVE }
+            } else {
+                liveItems
+            }
+            if (searchQuery.isBlank()) source
+            else source.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
+    }
+
+    val shownVod by produceState(
+        initialValue = emptyList<MediaItem>(),
+        vodItems, selectedVodCat, searchQuery, favorites
+    ) {
+        value = withContext(Dispatchers.Default) {
+            val source = if (selectedVodCat == "Favorites") {
+                favorites.filter { it.contentType == ContentType.MOVIE }
+            } else {
+                vodItems
+            }
+            if (searchQuery.isBlank()) source
+            else source.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
+    }
+
+    val shownSeries by produceState(
+        initialValue = emptyList<MediaItem>(),
+        seriesItems, selectedSeriesCat, searchQuery, favorites
+    ) {
+        value = withContext(Dispatchers.Default) {
+            val source = if (selectedSeriesCat == "Favorites") {
+                favorites.filter { it.contentType == ContentType.SERIES }
+            } else {
+                seriesItems
+            }
+            if (searchQuery.isBlank()) source
+            else source.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
+    }
+
+    // Back-navigation hierarchy:
+    // 1. Card menu sheet -> close
+    // 2. Fullscreen VOD player -> close back to exact previous screen/scroll
+    // 3. Expanded YouTube Live TV player -> minimize to mini-player
+    // 4. Detail screen -> close back to exact tab & scroll position
+    // 5. Non-Home tabs -> return to Home tab (instead of exiting)
+    // 6. Home tab -> default Android exit
+    BackHandler(
+        enabled = cardMenuTarget != null ||
+            activeVodItem != null ||
+            (activeLiveItem != null && !isLiveMiniPlayer) ||
+            selectedDetailItem != null ||
+            selectedTab != 0
+    ) {
+        when {
+            cardMenuTarget != null -> cardMenuTarget = null
+            activeVodItem != null -> activeVodItem = null
+            activeLiveItem != null && !isLiveMiniPlayer -> isLiveMiniPlayer = true
+            selectedDetailItem != null -> selectedDetailItem = null
+            selectedTab != 0 -> {
+                selectedTab = 0
+                searchQuery = ""
+                barsVisible = true
+            }
         }
     }
 
@@ -281,7 +375,16 @@ private fun AetherV2App(
 
     fun playItem(item: MediaItem) {
         recordRecent(item)
-        activePlayerItem = item
+        if (item.contentType == ContentType.LIVE) {
+            activeVodItem = null
+            activeLiveItem = item
+            isLiveMiniPlayer = false
+        } else {
+            // Stop any running live mini-player when launching a VOD movie/episode
+            activeLiveItem = null
+            isLiveMiniPlayer = false
+            activeVodItem = item
+        }
     }
 
     fun openDetail(item: MediaItem) {
@@ -703,30 +806,17 @@ private fun AetherV2App(
         }
     }
 
-    val playingNow = activePlayerItem
-    if (playingNow != null) {
-        PlayerScreen(
-            item = playingNow,
-            isInPipMode = isInPipMode,
-            onBack = { activePlayerItem = null },
-            onEnterPip = onEnterPip,
-            onOpenExternal = {
-                launchExternalPlayer(context, playingNow.streamUrl, playingNow.name)
-            }
-        )
-        return
-    }
-
-    var barsVisible by remember { mutableStateOf(true) }
     val hideBarsConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (available.y < -12f) barsVisible = false
-                else if (available.y > 12f) barsVisible = true
+                if (available.y < -18f && barsVisible) barsVisible = false
+                else if (available.y > 18f && !barsVisible) barsVisible = true
                 return Offset.Zero
             }
         }
     }
+
+    val miniPlayerExtraPadding = if (activeLiveItem != null && isLiveMiniPlayer) 72.dp else 0.dp
 
     Box(
         modifier = Modifier
@@ -763,7 +853,7 @@ private fun AetherV2App(
                 }
             )
         } else {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 when (selectedTab) {
                     0 -> {
                         val movieAndSeriesFavs = remember(favorites) {
@@ -774,32 +864,25 @@ private fun AetherV2App(
                             recentlyWatched = recents,
                             favoriteIds = favoriteIds,
                             hasPlaylist = playlistMode.isNotBlank(),
+                            listState = homeListState,
+                            extraBottomPadding = miniPlayerExtraPadding,
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
                             onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) },
+                            onMoreClick = { cardMenuTarget = it },
                             onAddPlaylistClick = { showAddDialog = true }
                         )
                     }
                     1 -> {
-                        val catNames = remember(liveCategories) {
-                            listOf("All", "Favorites") + liveCategories.map { it.name }
-                        }
-                        val shown = remember(liveItems, selectedLiveCat, searchQuery, favorites) {
-                            val source = if (selectedLiveCat == "Favorites") {
-                                favorites.filter { it.contentType == ContentType.LIVE }
-                            } else {
-                                liveItems
-                            }
-                            if (searchQuery.isBlank()) source
-                            else source.filter { it.name.contains(searchQuery, ignoreCase = true) }
-                        }
                         LiveTvScreen(
-                            items = shown,
-                            categories = catNames,
+                            items = shownLive,
+                            categories = liveCatNames,
                             selectedCategory = selectedLiveCat,
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
+                            listState = liveListState,
                             topBarVisible = barsVisible,
+                            extraBottomPadding = miniPlayerExtraPadding,
                             emptyMessage = if (playlistMode.isBlank()) "Add a server from Home or Settings to watch Live TV" else "No live channels in this category",
                             searchQuery = searchQuery,
                             onSearchQueryChange = { searchQuery = it },
@@ -808,29 +891,20 @@ private fun AetherV2App(
                                 else loadLiveCategory(cat, forceNetwork = false)
                             },
                             onPlayClick = { playItem(it) },
-                            onFavoriteClick = { toggleFavorite(it) }
+                            onFavoriteClick = { toggleFavorite(it) },
+                            onMoreClick = { cardMenuTarget = it }
                         )
                     }
                     2 -> {
-                        val catNames = remember(vodCategories) {
-                            listOf("All", "Favorites") + vodCategories.map { it.name }
-                        }
-                        val shown = remember(vodItems, selectedVodCat, searchQuery, favorites) {
-                            val source = if (selectedVodCat == "Favorites") {
-                                favorites.filter { it.contentType == ContentType.MOVIE }
-                            } else {
-                                vodItems
-                            }
-                            if (searchQuery.isBlank()) source
-                            else source.filter { it.name.contains(searchQuery, ignoreCase = true) }
-                        }
                         MediaGridScreen(
-                            items = shown,
-                            categories = catNames,
+                            items = shownVod,
+                            categories = vodCatNames,
                             selectedCategory = selectedVodCat,
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
+                            gridState = moviesGridState,
                             topBarVisible = barsVisible,
+                            extraBottomPadding = miniPlayerExtraPadding,
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes server for Movies" else "No movies in this category",
                             searchQuery = searchQuery,
                             searchPlaceholder = "Search movies...",
@@ -841,29 +915,20 @@ private fun AetherV2App(
                             },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
-                            onPlayClick = { playItem(it) }
+                            onPlayClick = { playItem(it) },
+                            onMoreClick = { cardMenuTarget = it }
                         )
                     }
                     3 -> {
-                        val catNames = remember(seriesCategories) {
-                            listOf("All", "Favorites") + seriesCategories.map { it.name }
-                        }
-                        val shown = remember(seriesItems, selectedSeriesCat, searchQuery, favorites) {
-                            val source = if (selectedSeriesCat == "Favorites") {
-                                favorites.filter { it.contentType == ContentType.SERIES }
-                            } else {
-                                seriesItems
-                            }
-                            if (searchQuery.isBlank()) source
-                            else source.filter { it.name.contains(searchQuery, ignoreCase = true) }
-                        }
                         MediaGridScreen(
-                            items = shown,
-                            categories = catNames,
+                            items = shownSeries,
+                            categories = seriesCatNames,
                             selectedCategory = selectedSeriesCat,
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
+                            gridState = seriesGridState,
                             topBarVisible = barsVisible,
+                            extraBottomPadding = miniPlayerExtraPadding,
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes server for Series" else "No series in this category",
                             searchQuery = searchQuery,
                             searchPlaceholder = "Search series...",
@@ -874,7 +939,8 @@ private fun AetherV2App(
                             },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
-                            onPlayClick = { openDetail(it) }
+                            onPlayClick = { openDetail(it) },
+                            onMoreClick = { cardMenuTarget = it }
                         )
                     }
                     4 -> {
@@ -885,6 +951,7 @@ private fun AetherV2App(
                             downloadedFiles = downloadedFiles,
                             favoritesCount = favorites.size,
                             recentCount = recents.size,
+                            extraBottomPadding = miniPlayerExtraPadding,
                             onSelectServer = { srv -> persistServers(servers, srv.id) },
                             onDeleteServer = { srv ->
                                 val remaining = servers.filterNot { it.id == srv.id }
@@ -940,9 +1007,9 @@ private fun AetherV2App(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 84.dp)
+                        .padding(start = 16.dp, end = 16.dp, bottom = 74.dp + miniPlayerExtraPadding)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xE6FFFFFF))
+                        .background(Color(0xEEFFFFFF))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
@@ -975,6 +1042,79 @@ private fun AetherV2App(
                 )
             }
         }
+
+        // Persistent YouTube-style Live TV Player (Expanded or Docked Mini-Player)
+        activeLiveItem?.let { liveChannel ->
+            val livePool = remember(shownLive, liveItems, allLiveCache, favorites) {
+                when {
+                    shownLive.isNotEmpty() -> shownLive
+                    liveItems.isNotEmpty() -> liveItems
+                    allLiveCache.isNotEmpty() -> allLiveCache
+                    else -> favorites.filter { it.contentType == ContentType.LIVE }
+                }
+            }
+            YouTubeLivePlayerOverlay(
+                channel = liveChannel,
+                allChannels = livePool,
+                categories = liveCatNames,
+                favoriteIds = favoriteIds,
+                isMiniPlayer = isLiveMiniPlayer,
+                isInPipMode = isInPipMode,
+                barsVisible = barsVisible && selectedDetailItem == null,
+                onSwitchChannel = { next ->
+                    recordRecent(next)
+                    activeLiveItem = next
+                },
+                onToggleMinimize = { mini -> isLiveMiniPlayer = mini },
+                onClose = {
+                    activeLiveItem = null
+                    isLiveMiniPlayer = false
+                },
+                onToggleFavorite = { toggleFavorite(it) },
+                onMoreClick = { cardMenuTarget = it },
+                onEnterPip = onEnterPip,
+                onOpenExternal = { launchExternalPlayer(context, it.streamUrl, it.name) }
+            )
+        }
+
+        // Fullscreen VOD / Movie / Series Episode Player Overlay (keeps underlying grid & scroll states alive)
+        activeVodItem?.let { playingVod ->
+            PlayerScreen(
+                item = playingVod,
+                isInPipMode = isInPipMode,
+                onBack = { activeVodItem = null },
+                onEnterPip = onEnterPip,
+                onOpenExternal = { launchExternalPlayer(context, playingVod.streamUrl, playingVod.name) }
+            )
+        }
+    }
+
+    // Card ••• Action Sheet
+    cardMenuTarget?.let { target ->
+        val isDownloadable = target.contentType == ContentType.MOVIE
+        MediaActionBottomSheet(
+            item = target,
+            isFavorite = favoriteIds.contains(target.id),
+            onDismiss = { cardMenuTarget = null },
+            onViewDetails = if (target.contentType != ContentType.LIVE) {
+                { openDetail(target) }
+            } else null,
+            onPlay = {
+                if (target.contentType == ContentType.SERIES) openDetail(target)
+                else playItem(target)
+            },
+            onOpenExternal = { launchExternalPlayer(context, target.streamUrl, target.name) },
+            onDownloadBuiltIn = if (isDownloadable) {
+                {
+                    MediaDownloadHelper.startBuiltInDownload(context, target.streamUrl, target.name)
+                    downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
+                }
+            } else null,
+            onDownloadExternal = if (isDownloadable) {
+                { MediaDownloadHelper.startExternalDownload(context, target.streamUrl, target.name) }
+            } else null,
+            onToggleFavorite = { toggleFavorite(target) }
+        )
     }
 
     // Confirmation Prompt when tapping "All"

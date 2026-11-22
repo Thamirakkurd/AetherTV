@@ -11,26 +11,37 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.components.UnifiedMediaTopBar
 import com.aethertv.v2.ui.theme.MatteGlassTokens
+
+private val ChannelRowShape = RoundedCornerShape(8.dp)
+private val ChannelLogoShape = RoundedCornerShape(6.dp)
+private val ChannelBorder = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder)
 
 @Composable
 fun LiveTvScreen(
@@ -40,14 +51,19 @@ fun LiveTvScreen(
     favoriteIds: Set<String>,
     isLoading: Boolean,
     emptyMessage: String,
+    listState: LazyListState = rememberLazyListState(),
     topBarVisible: Boolean = true,
+    extraBottomPadding: Dp = 0.dp,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onSelectCategory: (String) -> Unit,
     onPlayClick: (MediaItem) -> Unit,
-    onFavoriteClick: (MediaItem) -> Unit
+    onFavoriteClick: (MediaItem) -> Unit,
+    onMoreClick: (MediaItem) -> Unit = {}
 ) {
+    val context = LocalContext.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Box(
         modifier = Modifier
@@ -69,53 +85,65 @@ fun LiveTvScreen(
             }
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = 12.dp,
                     end = 12.dp,
-                    top = topInset + 64.dp,
-                    bottom = 112.dp
+                    top = topInset + 62.dp,
+                    bottom = navInset + 84.dp + extraBottomPadding
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(items, key = { it.id }) { channel ->
+                items(items, key = { it.id }, contentType = { "live_channel" }) { channel ->
                     val isFav = favoriteIds.contains(channel.id)
-                    val subtitleText = buildString {
-                        if (channel.group.isNotBlank()) append(channel.group)
-                        val extra = channel.badge.trim()
-                        if (extra.isNotBlank() && !extra.equals("LIVE", ignoreCase = true)) {
-                            if (isNotEmpty()) append(" • ")
-                            append(extra)
+                    val subtitleText = remember(channel.group, channel.badge) {
+                        buildString {
+                            if (channel.group.isNotBlank()) append(channel.group)
+                            val extra = channel.badge.trim()
+                            if (extra.isNotBlank() && !extra.equals("LIVE", ignoreCase = true)) {
+                                if (isNotEmpty()) append(" • ")
+                                append(extra)
+                            }
+                        }
+                    }
+                    val logoReq = remember(channel.posterUrl) {
+                        channel.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                            ImageRequest.Builder(context)
+                                .data(url)
+                                .crossfade(true)
+                                .size(144, 144)
+                                .build()
                         }
                     }
 
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
+                        shape = ChannelRowShape,
                         color = MatteGlassTokens.CanvasWhite,
-                        border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+                        border = ChannelBorder,
                         shadowElevation = 0.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(ChannelRowShape)
                             .clickable { onPlayClick(channel) }
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 9.dp),
+                                .padding(start = 10.dp, end = 4.dp, top = 9.dp, bottom = 9.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(46.dp)
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .clip(ChannelLogoShape)
                                     .background(MatteGlassTokens.SubtleSurface)
-                                    .border(BorderStroke(1.dp, MatteGlassTokens.NeutralBorder), RoundedCornerShape(6.dp)),
+                                    .border(ChannelBorder, ChannelLogoShape),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (!channel.posterUrl.isNullOrBlank()) {
+                                if (logoReq != null) {
                                     AsyncImage(
-                                        model = channel.posterUrl,
+                                        model = logoReq,
                                         contentDescription = channel.name,
                                         contentScale = ContentScale.Fit,
                                         modifier = Modifier.fillMaxSize().padding(4.dp)
@@ -153,12 +181,12 @@ fun LiveTvScreen(
                                 }
                             }
 
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.width(6.dp))
 
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = MatteGlassTokens.HeaderPillBg,
-                                border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder)
+                                border = ChannelBorder
                             ) {
                                 Text(
                                     text = "LIVE",
@@ -171,13 +199,25 @@ fun LiveTvScreen(
 
                             IconButton(
                                 onClick = { onFavoriteClick(channel) },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(34.dp)
                             ) {
                                 Icon(
                                     imageVector = if (isFav) Icons.Default.Star else Icons.Default.StarBorder,
                                     contentDescription = "Favorite channel",
                                     tint = if (isFav) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = { onMoreClick(channel) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "Channel options",
+                                    tint = MatteGlassTokens.CharcoalMuted,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -205,9 +245,7 @@ fun LiveTvScreen(
                     LinearProgressIndicator(
                         color = MatteGlassTokens.CharcoalPrimary,
                         trackColor = MatteGlassTokens.HeaderPillBg,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }

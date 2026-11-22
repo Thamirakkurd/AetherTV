@@ -6,24 +6,30 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.aethertv.v2.data.ContentType
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.components.PosterMediaCard
@@ -36,11 +42,17 @@ fun HomeScreen(
     recentlyWatched: List<MediaItem>,
     favoriteIds: Set<String>,
     hasPlaylist: Boolean,
+    listState: LazyListState = rememberLazyListState(),
+    extraBottomPadding: Dp = 0.dp,
     onItemClick: (MediaItem) -> Unit,
     onFavoriteClick: (MediaItem) -> Unit,
     onPlayClick: (MediaItem) -> Unit,
+    onMoreClick: (MediaItem) -> Unit = onItemClick,
     onAddPlaylistClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -52,12 +64,13 @@ fun HomeScreen(
         )
 
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 6.dp, bottom = 116.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = navInset + 84.dp + extraBottomPadding),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             if (!hasPlaylist) {
-                item {
+                item(key = "welcome_card") {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = MatteGlassTokens.HeaderPillBg,
@@ -115,7 +128,7 @@ fun HomeScreen(
                 }
             }
 
-            item {
+            item(key = "favorites_shelf") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "Movies & Series Favorites",
@@ -148,7 +161,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(favoriteMedia, key = { it.id }) { item ->
+                            items(favoriteMedia, key = { it.id }, contentType = { "fav_card" }) { item ->
                                 val typeLabel = if (item.contentType == ContentType.SERIES) "Series" else "Movie"
                                 val microHeader = if (item.group.isNotBlank()) "$typeLabel • ${item.group}" else typeLabel
 
@@ -167,6 +180,7 @@ fun HomeScreen(
                                         onCardClick = { onItemClick(item) },
                                         onFavoriteClick = { onFavoriteClick(item) },
                                         onPlayClick = { onPlayClick(item) },
+                                        onMoreClick = { onMoreClick(item) },
                                         isLarge = true,
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -179,7 +193,7 @@ fun HomeScreen(
                 }
             }
 
-            item {
+            item(key = "recents_shelf") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp),
@@ -213,13 +227,25 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(recentlyWatched, key = { "recent_${it.id}" }) { item ->
+                            items(recentlyWatched, key = { "recent_${it.id}" }, contentType = { "recent_card" }) { item ->
                                 val thumbShape = RoundedCornerShape(6.dp)
+                                val thumbReq = remember(item.posterUrl) {
+                                    item.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                                        ImageRequest.Builder(context)
+                                            .data(url)
+                                            .crossfade(true)
+                                            .size(260, 360)
+                                            .build()
+                                    }
+                                }
                                 Column(
                                     modifier = Modifier
                                         .width(126.dp)
                                         .clip(thumbShape)
-                                        .clickable { onItemClick(item) }
+                                        .clickable {
+                                            if (item.contentType == ContentType.LIVE) onPlayClick(item)
+                                            else onItemClick(item)
+                                        }
                                 ) {
                                     Box(
                                         modifier = Modifier
@@ -229,9 +255,9 @@ fun HomeScreen(
                                             .background(Color(0xFF27272A))
                                             .border(BorderStroke(1.dp, MatteGlassTokens.NeutralBorder), thumbShape)
                                     ) {
-                                        if (!item.posterUrl.isNullOrBlank()) {
+                                        if (thumbReq != null) {
                                             AsyncImage(
-                                                model = item.posterUrl,
+                                                model = thumbReq,
                                                 contentDescription = item.name,
                                                 contentScale = ContentScale.Crop,
                                                 modifier = Modifier.fillMaxSize()
