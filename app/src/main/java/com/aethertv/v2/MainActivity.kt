@@ -1,10 +1,13 @@
 package com.aethertv.v2
 
+import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Bundle
+import android.util.Rational
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -40,6 +43,7 @@ import com.aethertv.v2.ui.components.NavTabItem
 import com.aethertv.v2.ui.screens.HomeScreen
 import com.aethertv.v2.ui.screens.MediaDetailScreen
 import com.aethertv.v2.ui.screens.MediaGridScreen
+import com.aethertv.v2.ui.screens.PlayerScreen
 import com.aethertv.v2.ui.screens.SettingsScreen
 import com.aethertv.v2.ui.theme.MatteGlassTheme
 import com.aethertv.v2.ui.theme.MatteGlassTokens
@@ -48,6 +52,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    private val isInPipModeState = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -56,9 +62,29 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             MatteGlassTheme {
-                AetherV2App()
+                AetherV2App(
+                    isInPipMode = isInPipModeState.value,
+                    onEnterPip = {
+                        try {
+                            val params = PictureInPictureParams.Builder()
+                                .setAspectRatio(Rational(16, 9))
+                                .build()
+                            enterPictureInPictureMode(params)
+                        } catch (_: Exception) {
+                            Toast.makeText(this, "PiP unavailable on this device", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
             }
         }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        isInPipModeState.value = isInPictureInPictureMode
     }
 }
 
@@ -76,7 +102,10 @@ private fun launchExternalPlayer(context: Context, url: String, title: String) {
 }
 
 @Composable
-private fun AetherV2App() {
+private fun AetherV2App(
+    isInPipMode: Boolean,
+    onEnterPip: () -> Unit
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences("aethertv_v2_prefs", Context.MODE_PRIVATE) }
@@ -104,33 +133,41 @@ private fun AetherV2App() {
     var xtreamPass by remember { mutableStateOf(prefs.getString("pass", "") ?: "") }
     var m3uUrl by remember { mutableStateOf(prefs.getString("m3u_url", "") ?: "") }
 
-    // Catalog state
+    // Catalog state + in-memory cache for "All"
     var liveCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
     var selectedLiveCat by remember { mutableStateOf("") }
     var liveItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var allLiveCache by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var m3uAllItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
 
     var vodCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
     var selectedVodCat by remember { mutableStateOf("") }
     var vodItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var allVodCache by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
 
     var seriesCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
     var selectedSeriesCat by remember { mutableStateOf("") }
     var seriesItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var allSeriesCache by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
 
     // Persisted Favorites & Recents
     var favorites by remember { mutableStateOf(XtreamClient.decodeItems(prefs.getString("favorites_json", null))) }
     var recents by remember { mutableStateOf(XtreamClient.decodeItems(prefs.getString("recents_json", null))) }
     val favoriteIds = remember(favorites) { favorites.map { it.id }.toSet() }
 
-    // Media Detail (Info Page) state
+    // Media Detail (Info Page) & Built-in Player state
     var selectedDetailItem by remember { mutableStateOf<MediaItem?>(null) }
     var detailInfo by remember { mutableStateOf(MediaDetailInfo()) }
     var detailEpisodes by remember { mutableStateOf<List<EpisodeItem>>(emptyList()) }
     var loadingDetail by remember { mutableStateOf(false) }
+    var activePlayerItem by remember { mutableStateOf<MediaItem?>(null) }
 
-    BackHandler(enabled = selectedDetailItem != null) {
-        selectedDetailItem = null
+    BackHandler(enabled = activePlayerItem != null || selectedDetailItem != null) {
+        if (activePlayerItem != null) {
+            activePlayerItem = null
+        } else {
+            selectedDetailItem = null
+        }
     }
 
     fun toggleFavorite(item: MediaItem) {
@@ -151,7 +188,7 @@ private fun AetherV2App() {
 
     fun playItem(item: MediaItem) {
         recordRecent(item)
-        launchExternalPlayer(context, item.streamUrl, item.name)
+        activePlayerItem = item
     }
 
     fun openDetail(item: MediaItem) {
@@ -210,6 +247,33 @@ private fun AetherV2App() {
             liveItems = if (catName == "All") m3uAllItems else m3uAllItems.filter { it.group == catName }
             return
         }
+        if (catName == "All") {
+            if (allLiveCache.isNotEmpty()) {
+                liveItems = allLiveCache
+                return
+            }
+            scope.launch {
+                isLoading = true
+                statusMessage = "Loading all live channels..."
+                try {
+                    val json = XtreamClient.fetchText(
+                        "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_live_streams"
+                    )
+                    val catMap = liveCategories.associate { it.id to it.name }
+                    val parsed = withContext(Dispatchers.Default) {
+                        XtreamClient.parseLiveStreams(json, xtreamHost, xtreamUser, xtreamPass, "Live", catMap)
+                    }
+                    allLiveCache = parsed
+                    liveItems = parsed
+                    statusMessage = null
+                } catch (e: Exception) {
+                    statusMessage = "Live error: ${e.message}"
+                } finally {
+                    isLoading = false
+                }
+            }
+            return
+        }
         val cat = liveCategories.firstOrNull { it.name == catName } ?: return
         scope.launch {
             isLoading = true
@@ -233,6 +297,33 @@ private fun AetherV2App() {
     fun loadVodCategory(catName: String) {
         selectedVodCat = catName
         if (catName == "Favorites") return
+        if (catName == "All") {
+            if (allVodCache.isNotEmpty()) {
+                vodItems = allVodCache
+                return
+            }
+            scope.launch {
+                isLoading = true
+                statusMessage = "Loading all movies..."
+                try {
+                    val json = XtreamClient.fetchText(
+                        "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_vod_streams"
+                    )
+                    val catMap = vodCategories.associate { it.id to it.name }
+                    val parsed = withContext(Dispatchers.Default) {
+                        XtreamClient.parseVodStreams(json, xtreamHost, xtreamUser, xtreamPass, "Movies", catMap)
+                    }
+                    allVodCache = parsed
+                    vodItems = parsed
+                    statusMessage = null
+                } catch (e: Exception) {
+                    statusMessage = "Movies error: ${e.message}"
+                } finally {
+                    isLoading = false
+                }
+            }
+            return
+        }
         val cat = vodCategories.firstOrNull { it.name == catName } ?: return
         scope.launch {
             isLoading = true
@@ -256,6 +347,33 @@ private fun AetherV2App() {
     fun loadSeriesCategory(catName: String) {
         selectedSeriesCat = catName
         if (catName == "Favorites") return
+        if (catName == "All") {
+            if (allSeriesCache.isNotEmpty()) {
+                seriesItems = allSeriesCache
+                return
+            }
+            scope.launch {
+                isLoading = true
+                statusMessage = "Loading all series..."
+                try {
+                    val json = XtreamClient.fetchText(
+                        "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_series"
+                    )
+                    val catMap = seriesCategories.associate { it.id to it.name }
+                    val parsed = withContext(Dispatchers.Default) {
+                        XtreamClient.parseSeries(json, "Series", catMap)
+                    }
+                    allSeriesCache = parsed
+                    seriesItems = parsed
+                    statusMessage = null
+                } catch (e: Exception) {
+                    statusMessage = "Series error: ${e.message}"
+                } finally {
+                    isLoading = false
+                }
+            }
+            return
+        }
         val cat = seriesCategories.firstOrNull { it.name == catName } ?: return
         scope.launch {
             isLoading = true
@@ -350,6 +468,9 @@ private fun AetherV2App() {
         liveItems = emptyList()
         vodItems = emptyList()
         seriesItems = emptyList()
+        allLiveCache = emptyList()
+        allVodCache = emptyList()
+        allSeriesCache = emptyList()
         prefs.edit()
             .putString("mode", "xtream")
             .putString("host", base)
@@ -390,6 +511,20 @@ private fun AetherV2App() {
         } else if (playlistMode == "m3u" && m3uUrl.isNotBlank()) {
             connectM3u(m3uUrl)
         }
+    }
+
+    val playingNow = activePlayerItem
+    if (playingNow != null) {
+        PlayerScreen(
+            item = playingNow,
+            isInPipMode = isInPipMode,
+            onBack = { activePlayerItem = null },
+            onEnterPip = onEnterPip,
+            onOpenExternal = {
+                launchExternalPlayer(context, playingNow.streamUrl, playingNow.name)
+            }
+        )
+        return
     }
 
     Box(
@@ -472,10 +607,8 @@ private fun AetherV2App() {
                         )
                     }
                     1 -> {
-                        val catNames = remember(liveCategories, playlistMode) {
-                            val base = liveCategories.map { it.name }
-                            if (playlistMode == "m3u") listOf("All", "Favorites") + base
-                            else listOf("Favorites") + base
+                        val catNames = remember(liveCategories) {
+                            listOf("All", "Favorites") + liveCategories.map { it.name }
                         }
                         val shown = remember(liveItems, selectedLiveCat, searchQuery, favorites) {
                             val source = if (selectedLiveCat == "Favorites") {
@@ -496,11 +629,13 @@ private fun AetherV2App() {
                             onSelectCategory = { loadLiveCategory(it) },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
-                            onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) }
+                            onPlayClick = { playItem(it) }
                         )
                     }
                     2 -> {
-                        val catNames = remember(vodCategories) { listOf("Favorites") + vodCategories.map { it.name } }
+                        val catNames = remember(vodCategories) {
+                            listOf("All", "Favorites") + vodCategories.map { it.name }
+                        }
                         val shown = remember(vodItems, selectedVodCat, searchQuery, favorites) {
                             val source = if (selectedVodCat == "Favorites") {
                                 favorites.filter { it.contentType == ContentType.MOVIE }
@@ -520,11 +655,13 @@ private fun AetherV2App() {
                             onSelectCategory = { loadVodCategory(it) },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
-                            onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) }
+                            onPlayClick = { playItem(it) }
                         )
                     }
                     3 -> {
-                        val catNames = remember(seriesCategories) { listOf("Favorites") + seriesCategories.map { it.name } }
+                        val catNames = remember(seriesCategories) {
+                            listOf("All", "Favorites") + seriesCategories.map { it.name }
+                        }
                         val shown = remember(seriesItems, selectedSeriesCat, searchQuery, favorites) {
                             val source = if (selectedSeriesCat == "Favorites") {
                                 favorites.filter { it.contentType == ContentType.SERIES }
@@ -544,7 +681,7 @@ private fun AetherV2App() {
                             onSelectCategory = { loadSeriesCategory(it) },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
-                            onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) }
+                            onPlayClick = { openDetail(it) }
                         )
                     }
                     4 -> {
@@ -578,6 +715,9 @@ private fun AetherV2App() {
                                 liveItems = emptyList()
                                 vodItems = emptyList()
                                 seriesItems = emptyList()
+                                allLiveCache = emptyList()
+                                allVodCache = emptyList()
+                                allSeriesCache = emptyList()
                                 m3uAllItems = emptyList()
                                 favorites = emptyList()
                                 recents = emptyList()

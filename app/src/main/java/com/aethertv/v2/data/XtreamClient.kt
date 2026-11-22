@@ -9,11 +9,11 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 object XtreamClient {
-    private const val USER_AGENT = "IPTVSmartersPro"
+    const val USER_AGENT = "IPTVSmartersPro"
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(45, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
     fun normalizeHost(raw: String): String {
@@ -59,7 +59,8 @@ object XtreamClient {
         host: String,
         user: String,
         pass: String,
-        categoryName: String
+        categoryName: String,
+        categoryMap: Map<String, String> = emptyMap()
     ): List<MediaItem> {
         val trimmed = json.trim()
         if (!trimmed.startsWith("[")) return emptyList()
@@ -71,11 +72,13 @@ object XtreamClient {
             val name = obj.safeStr("name")
             if (streamId.isEmpty() || name.isEmpty()) continue
             val icon = obj.safeStr("stream_icon").ifEmpty { null }
+            val catId = obj.safeStr("category_id")
+            val resolvedGroup = categoryMap[catId] ?: categoryName
             out.add(
                 MediaItem(
                     id = "live_$streamId",
                     name = name,
-                    group = categoryName,
+                    group = resolvedGroup,
                     posterUrl = icon,
                     streamUrl = "$host/live/$user/$pass/$streamId.ts",
                     contentType = ContentType.LIVE,
@@ -91,7 +94,8 @@ object XtreamClient {
         host: String,
         user: String,
         pass: String,
-        categoryName: String
+        categoryName: String,
+        categoryMap: Map<String, String> = emptyMap()
     ): List<MediaItem> {
         val trimmed = json.trim()
         if (!trimmed.startsWith("[")) return emptyList()
@@ -106,11 +110,13 @@ object XtreamClient {
             val poster = obj.safeStr("stream_icon").ifEmpty { null }
             val rating = obj.safeStr("rating")
             val badge = if (rating.isNotEmpty() && rating != "0") "★ $rating" else "MOVIE"
+            val catId = obj.safeStr("category_id")
+            val resolvedGroup = categoryMap[catId] ?: categoryName
             out.add(
                 MediaItem(
                     id = "vod_$streamId",
                     name = name,
-                    group = categoryName,
+                    group = resolvedGroup,
                     posterUrl = poster,
                     streamUrl = "$host/movie/$user/$pass/$streamId.$ext",
                     contentType = ContentType.MOVIE,
@@ -123,7 +129,8 @@ object XtreamClient {
 
     fun parseSeries(
         json: String,
-        categoryName: String
+        categoryName: String,
+        categoryMap: Map<String, String> = emptyMap()
     ): List<MediaItem> {
         val trimmed = json.trim()
         if (!trimmed.startsWith("[")) return emptyList()
@@ -137,11 +144,13 @@ object XtreamClient {
             val cover = obj.safeStr("cover").ifEmpty { null }
             val rating = obj.safeStr("rating")
             val badge = if (rating.isNotEmpty() && rating != "0") "★ $rating" else "SERIES"
+            val catId = obj.safeStr("category_id")
+            val resolvedGroup = categoryMap[catId] ?: categoryName
             out.add(
                 MediaItem(
                     id = "series_$seriesId",
                     name = name,
-                    group = categoryName,
+                    group = resolvedGroup,
                     posterUrl = cover,
                     streamUrl = "series://$seriesId",
                     contentType = ContentType.SERIES,
