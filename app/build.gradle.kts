@@ -5,6 +5,15 @@ plugins {
 }
 
 android {
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("aethertv_debug.keystore")
+            storePassword = "android"
+            keyAlias = "aethertv"
+            keyPassword = "android"
+        }
+    }
+
     namespace = "com.aethertv.v2"
     compileSdk = 35
 
