@@ -256,13 +256,11 @@ private fun AetherV2App(
                 isLoading = true
                 statusMessage = "Loading all live channels..."
                 try {
-                    val json = XtreamClient.fetchText(
-                        "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_live_streams"
-                    )
                     val catMap = liveCategories.associate { it.id to it.name }
-                    val parsed = withContext(Dispatchers.Default) {
-                        XtreamClient.parseLiveStreams(json, xtreamHost, xtreamUser, xtreamPass, "Live", catMap)
-                    }
+                    val parsed = XtreamClient.fetchLiveStreams(
+                        "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_live_streams",
+                        xtreamHost, xtreamUser, xtreamPass, "Live", catMap
+                    )
                     allLiveCache = parsed
                     liveItems = parsed
                     statusMessage = null
@@ -279,12 +277,10 @@ private fun AetherV2App(
             isLoading = true
             statusMessage = "Loading $catName..."
             try {
-                val json = XtreamClient.fetchText(
-                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_live_streams&category_id=${cat.id}"
+                liveItems = XtreamClient.fetchLiveStreams(
+                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_live_streams&category_id=${cat.id}",
+                    xtreamHost, xtreamUser, xtreamPass, cat.name
                 )
-                liveItems = withContext(Dispatchers.Default) {
-                    XtreamClient.parseLiveStreams(json, xtreamHost, xtreamUser, xtreamPass, cat.name)
-                }
                 statusMessage = null
             } catch (e: Exception) {
                 statusMessage = "Live error: ${e.message}"
@@ -306,13 +302,11 @@ private fun AetherV2App(
                 isLoading = true
                 statusMessage = "Loading all movies..."
                 try {
-                    val json = XtreamClient.fetchText(
-                        "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_vod_streams"
-                    )
                     val catMap = vodCategories.associate { it.id to it.name }
-                    val parsed = withContext(Dispatchers.Default) {
-                        XtreamClient.parseVodStreams(json, xtreamHost, xtreamUser, xtreamPass, "Movies", catMap)
-                    }
+                    val parsed = XtreamClient.fetchVodStreams(
+                        "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_vod_streams",
+                        xtreamHost, xtreamUser, xtreamPass, "Movies", catMap
+                    )
                     allVodCache = parsed
                     vodItems = parsed
                     statusMessage = null
@@ -329,12 +323,10 @@ private fun AetherV2App(
             isLoading = true
             statusMessage = "Loading $catName..."
             try {
-                val json = XtreamClient.fetchText(
-                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_vod_streams&category_id=${cat.id}"
+                vodItems = XtreamClient.fetchVodStreams(
+                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_vod_streams&category_id=${cat.id}",
+                    xtreamHost, xtreamUser, xtreamPass, cat.name
                 )
-                vodItems = withContext(Dispatchers.Default) {
-                    XtreamClient.parseVodStreams(json, xtreamHost, xtreamUser, xtreamPass, cat.name)
-                }
                 statusMessage = null
             } catch (e: Exception) {
                 statusMessage = "Movies error: ${e.message}"
@@ -356,13 +348,11 @@ private fun AetherV2App(
                 isLoading = true
                 statusMessage = "Loading all series..."
                 try {
-                    val json = XtreamClient.fetchText(
-                        "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_series"
-                    )
                     val catMap = seriesCategories.associate { it.id to it.name }
-                    val parsed = withContext(Dispatchers.Default) {
-                        XtreamClient.parseSeries(json, "Series", catMap)
-                    }
+                    val parsed = XtreamClient.fetchSeries(
+                        "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_series",
+                        "Series", catMap
+                    )
                     allSeriesCache = parsed
                     seriesItems = parsed
                     statusMessage = null
@@ -379,12 +369,10 @@ private fun AetherV2App(
             isLoading = true
             statusMessage = "Loading $catName..."
             try {
-                val json = XtreamClient.fetchText(
-                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_series&category_id=${cat.id}"
+                seriesItems = XtreamClient.fetchSeries(
+                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_series&category_id=${cat.id}",
+                    cat.name
                 )
-                seriesItems = withContext(Dispatchers.Default) {
-                    XtreamClient.parseSeries(json, cat.name)
-                }
                 statusMessage = null
             } catch (e: Exception) {
                 statusMessage = "Series error: ${e.message}"
