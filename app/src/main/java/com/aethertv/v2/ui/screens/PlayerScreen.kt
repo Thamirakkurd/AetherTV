@@ -560,7 +560,7 @@ fun PlayerScreen(
         }
 
         // Brightness / Volume Gesture HUD Pill
-        AnimatedVisibility(
+        androidx.compose.animation.AnimatedVisibility(
             visible = activeHud != null && !isInPipMode,
             enter = fadeIn(tween(120)),
             exit = fadeOut(tween(220)),
@@ -574,7 +574,7 @@ fun PlayerScreen(
         }
 
         // Smooth fade playback controls
-        AnimatedVisibility(
+        androidx.compose.animation.AnimatedVisibility(
             visible = controlsVisible && !isInPipMode,
             enter = fadeIn(tween(180)),
             exit = fadeOut(tween(200)),
@@ -1258,7 +1258,7 @@ fun YouTubeLivePlayerOverlay(
                 )
             }
 
-            AnimatedVisibility(
+            androidx.compose.animation.AnimatedVisibility(
                 visible = activeHud != null && !isInPipMode,
                 enter = fadeIn(tween(120)),
                 exit = fadeOut(tween(220)),
@@ -1267,7 +1267,7 @@ fun YouTubeLivePlayerOverlay(
                 activeHud?.let { hudType -> GestureFeedbackPill(type = hudType, progress = hudValue) }
             }
 
-            AnimatedVisibility(
+            androidx.compose.animation.AnimatedVisibility(
                 visible = controlsVisible && !isInPipMode,
                 enter = fadeIn(tween(180)),
                 exit = fadeOut(tween(200)),
@@ -1457,7 +1457,7 @@ fun YouTubeLivePlayerOverlay(
                         )
                     }
 
-                    AnimatedVisibility(
+                    androidx.compose.animation.AnimatedVisibility(
                         visible = controlsVisible,
                         enter = fadeIn(tween(160)),
                         exit = fadeOut(tween(180)),
