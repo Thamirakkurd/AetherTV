@@ -1616,7 +1616,7 @@ private fun YouTubeChannelFeedCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@kotlin.OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SubtitleSettingsSheet(
     mediaTitle: String,
