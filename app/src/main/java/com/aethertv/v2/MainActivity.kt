@@ -15,15 +15,22 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -43,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -73,8 +81,11 @@ import com.aethertv.v2.ui.screens.MediaGridScreen
 import com.aethertv.v2.ui.screens.PlayerScreen
 import com.aethertv.v2.ui.screens.SettingsScreen
 import com.aethertv.v2.ui.screens.YouTubeLivePlayerOverlay
+import com.aethertv.v2.ui.theme.AppThemeMode
 import com.aethertv.v2.ui.theme.MatteGlassTheme
 import com.aethertv.v2.ui.theme.MatteGlassTokens
+import com.aethertv.v2.ui.theme.livelyPress
+import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -90,8 +101,38 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
         )
         setContent {
-            MatteGlassTheme {
+            val prefs = remember { getSharedPreferences("aethertv_v2_prefs", Context.MODE_PRIVATE) }
+            var themeMode by remember {
+                val saved = prefs.getString("theme_mode", AppThemeMode.LIGHT.name) ?: AppThemeMode.LIGHT.name
+                mutableStateOf(
+                    try { AppThemeMode.valueOf(saved) } catch (_: Exception) { AppThemeMode.LIGHT }
+                )
+            }
+            val isDark = themeMode == AppThemeMode.DARK
+            val appHazeState = remember { HazeState() }
+
+            LaunchedEffect(isDark) {
+                enableEdgeToEdge(
+                    statusBarStyle = if (isDark) {
+                        SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+                    },
+                    navigationBarStyle = if (isDark) {
+                        SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+                    }
+                )
+            }
+
+            MatteGlassTheme(darkTheme = isDark, hazeState = appHazeState) {
                 AetherV2App(
+                    themeMode = themeMode,
+                    onChangeThemeMode = { mode ->
+                        themeMode = mode
+                        prefs.edit().putString("theme_mode", mode.name).apply()
+                    },
                     isInPipMode = isInPipModeState.value,
                     onEnterPip = {
                         try {
@@ -132,6 +173,8 @@ private fun launchExternalPlayer(context: Context, url: String, title: String) {
 
 @Composable
 private fun AetherV2App(
+    themeMode: AppThemeMode,
+    onChangeThemeMode: (AppThemeMode) -> Unit,
     isInPipMode: Boolean,
     onEnterPip: () -> Unit
 ) {
@@ -149,13 +192,16 @@ private fun AetherV2App(
         )
     }
 
+    // HorizontalPager for smooth 1:1 tab swipe gestures
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { tabs.size })
+    val selectedTab = pagerState.currentPage
+
     // Hoisted scroll states so tab scroll position is preserved across detail screens, players & tab switches
     val homeListState = rememberLazyListState()
     val liveListState = rememberLazyListState()
     val moviesGridState = rememberLazyGridState()
     val seriesGridState = rememberLazyGridState()
 
-    var selectedTab by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
@@ -235,13 +281,18 @@ private fun AetherV2App(
     var seriesItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var allSeriesCache by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
 
+    // Instant in-memory detail & episode caches (backed by disk cache)
+    val detailMemoryCache = remember { mutableStateMapOf<String, MediaDetailInfo>() }
+    val episodesMemoryCache = remember { mutableStateMapOf<String, List<EpisodeItem>>() }
+
     // Persisted Favorites & Recents
     var favorites by remember { mutableStateOf(XtreamClient.decodeItems(prefs.getString("favorites_json", null))) }
     var recents by remember { mutableStateOf(XtreamClient.decodeItems(prefs.getString("recents_json", null))) }
     val favoriteIds = remember(favorites) { favorites.map { it.id }.toSet() }
 
-    // Media Detail, VOD Player, and Persistent YouTube Live TV Player state
+    // Media Detail (with lastDetailItem retained during slide-out transition), VOD & Live Players
     var selectedDetailItem by remember { mutableStateOf<MediaItem?>(null) }
+    var lastRenderedDetailItem by remember { mutableStateOf<MediaItem?>(null) }
     var detailInfo by remember { mutableStateOf(MediaDetailInfo()) }
     var detailEpisodes by remember { mutableStateOf<List<EpisodeItem>>(emptyList()) }
     var loadingDetail by remember { mutableStateOf(false) }
@@ -250,7 +301,6 @@ private fun AetherV2App(
     var activeLiveItem by remember { mutableStateOf<MediaItem?>(null) }
     var isLiveMiniPlayer by remember { mutableStateOf(false) }
 
-    // Off-main-thread hoisted filtered lists so returning from detail screens keeps data & scroll intact
     val liveCatNames = remember(liveCategories) {
         listOf("All", "Favorites") + liveCategories.map { it.name }
     }
@@ -306,13 +356,7 @@ private fun AetherV2App(
         }
     }
 
-    // Back-navigation hierarchy:
-    // 1. Card menu sheet -> close
-    // 2. Fullscreen VOD player -> close back to exact previous screen/scroll
-    // 3. Expanded YouTube Live TV player -> minimize to mini-player
-    // 4. Detail screen -> close back to exact tab & scroll position
-    // 5. Non-Home tabs -> return to Home tab (instead of exiting)
-    // 6. Home tab -> default Android exit
+    // Back-navigation flow
     BackHandler(
         enabled = cardMenuTarget != null ||
             activeVodItem != null ||
@@ -326,9 +370,9 @@ private fun AetherV2App(
             activeLiveItem != null && !isLiveMiniPlayer -> isLiveMiniPlayer = true
             selectedDetailItem != null -> selectedDetailItem = null
             selectedTab != 0 -> {
-                selectedTab = 0
                 searchQuery = ""
                 barsVisible = true
+                scope.launch { pagerState.animateScrollToPage(0) }
             }
         }
     }
@@ -380,7 +424,6 @@ private fun AetherV2App(
             activeLiveItem = item
             isLiveMiniPlayer = false
         } else {
-            // Stop any running live mini-player when launching a VOD movie/episode
             activeLiveItem = null
             isLiveMiniPlayer = false
             activeVodItem = item
@@ -389,31 +432,71 @@ private fun AetherV2App(
 
     fun openDetail(item: MediaItem) {
         selectedDetailItem = item
+        lastRenderedDetailItem = item
+        val cacheKey = "${playlistScopeKey}_${item.id}"
+
+        // 1. Instant hit from in-memory cache (zero reload / zero flicker)
+        val memInfo = detailMemoryCache[cacheKey]
+        val memEps = episodesMemoryCache[cacheKey]
+        if (memInfo != null && (item.contentType != ContentType.SERIES || memEps != null)) {
+            detailInfo = memInfo
+            detailEpisodes = memEps ?: emptyList()
+            loadingDetail = false
+            return
+        }
+
         detailInfo = MediaDetailInfo()
         detailEpisodes = emptyList()
-        if (playlistMode != "xtream" || xtreamHost.isBlank()) return
+        if (playlistMode != "xtream" || xtreamHost.isBlank()) {
+            loadingDetail = false
+            return
+        }
 
         when (item.contentType) {
             ContentType.MOVIE -> {
                 val vodId = item.id.removePrefix("vod_")
                 if (vodId.isBlank()) return
-                loadingDetail = true
                 scope.launch {
+                    val diskInfo = PlaylistDiskCache.loadDetailInfo(context, cacheKey)
+                    if (diskInfo != null) {
+                        detailMemoryCache[cacheKey] = diskInfo
+                        if (selectedDetailItem?.id == item.id) {
+                            detailInfo = diskInfo
+                            loadingDetail = false
+                        }
+                        return@launch
+                    }
+                    loadingDetail = true
                     try {
                         val json = XtreamClient.fetchText(
                             "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_vod_info&vod_id=$vodId"
                         )
-                        detailInfo = withContext(Dispatchers.Default) { XtreamClient.parseVodDetail(json) }
+                        val parsed = withContext(Dispatchers.Default) { XtreamClient.parseVodDetail(json) }
+                        detailMemoryCache[cacheKey] = parsed
+                        PlaylistDiskCache.saveDetailInfo(context, cacheKey, parsed)
+                        if (selectedDetailItem?.id == item.id) detailInfo = parsed
                     } catch (_: Exception) {
                     } finally {
-                        loadingDetail = false
+                        if (selectedDetailItem?.id == item.id) loadingDetail = false
                     }
                 }
             }
             ContentType.SERIES -> {
                 val sid = item.seriesId ?: return
-                loadingDetail = true
                 scope.launch {
+                    val diskInfo = PlaylistDiskCache.loadDetailInfo(context, cacheKey)
+                    val diskEps = PlaylistDiskCache.loadEpisodes(context, cacheKey)
+                    if (diskInfo != null && diskEps.isNotEmpty()) {
+                        detailMemoryCache[cacheKey] = diskInfo
+                        episodesMemoryCache[cacheKey] = diskEps
+                        if (selectedDetailItem?.id == item.id) {
+                            detailInfo = diskInfo
+                            detailEpisodes = diskEps
+                            loadingDetail = false
+                        }
+                        return@launch
+                    }
+                    loadingDetail = true
                     try {
                         val json = XtreamClient.fetchText(
                             "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_series_info&series_id=$sid"
@@ -422,11 +505,17 @@ private fun AetherV2App(
                         val parsedEps = withContext(Dispatchers.Default) {
                             XtreamClient.parseSeriesEpisodes(json, xtreamHost, xtreamUser, xtreamPass)
                         }
-                        detailInfo = parsedInfo
-                        detailEpisodes = parsedEps
+                        detailMemoryCache[cacheKey] = parsedInfo
+                        episodesMemoryCache[cacheKey] = parsedEps
+                        PlaylistDiskCache.saveDetailInfo(context, cacheKey, parsedInfo)
+                        PlaylistDiskCache.saveEpisodes(context, cacheKey, parsedEps)
+                        if (selectedDetailItem?.id == item.id) {
+                            detailInfo = parsedInfo
+                            detailEpisodes = parsedEps
+                        }
                     } catch (_: Exception) {
                     } finally {
-                        loadingDetail = false
+                        if (selectedDetailItem?.id == item.id) loadingDetail = false
                     }
                 }
             }
@@ -758,6 +847,8 @@ private fun AetherV2App(
         allVodCache = emptyList()
         allSeriesCache = emptyList()
         m3uAllItems = emptyList()
+        detailMemoryCache.clear()
+        episodesMemoryCache.clear()
     }
 
     fun loadM3uForServer(srv: SavedServer, forceRefresh: Boolean) {
@@ -806,6 +897,18 @@ private fun AetherV2App(
         }
     }
 
+    // Trigger lazy category load when user swipes or taps to a tab
+    LaunchedEffect(selectedTab, activeServerId) {
+        searchQuery = ""
+        barsVisible = true
+        when (selectedTab) {
+            1 -> ensureLiveCategories(forceNetwork = false)
+            2 -> ensureVodCategories(forceNetwork = false)
+            3 -> ensureSeriesCategories(forceNetwork = false)
+            4 -> downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
+        }
+    }
+
     val hideBarsConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -816,7 +919,18 @@ private fun AetherV2App(
         }
     }
 
-    val miniPlayerExtraPadding = if (activeLiveItem != null && isLiveMiniPlayer) 72.dp else 0.dp
+    val miniPlayerExtraPadding = if (activeLiveItem != null && isLiveMiniPlayer) 74.dp else 0.dp
+    val detailOpen = selectedDetailItem != null
+    val backgroundScale by animateFloatAsState(
+        targetValue = if (detailOpen) 0.968f else 1f,
+        animationSpec = tween(280, easing = FastOutSlowInEasing),
+        label = "bgDepthScale"
+    )
+    val backgroundScrimAlpha by animateFloatAsState(
+        targetValue = if (detailOpen) 0.24f else 0f,
+        animationSpec = tween(260),
+        label = "bgScrimAlpha"
+    )
 
     Box(
         modifier = Modifier
@@ -824,37 +938,22 @@ private fun AetherV2App(
             .background(MatteGlassTokens.CanvasWhite)
             .nestedScroll(hideBarsConnection)
     ) {
-        val activeDetail = selectedDetailItem
-        if (activeDetail != null) {
-            MediaDetailScreen(
-                item = activeDetail,
-                detailInfo = detailInfo,
-                episodes = detailEpisodes,
-                isLoading = loadingDetail,
-                isFavorite = favoriteIds.contains(activeDetail.id),
-                onBack = { selectedDetailItem = null },
-                onToggleFavorite = { toggleFavorite(activeDetail) },
-                onWatchNow = { playItem(activeDetail) },
-                onDownloadItem = { triggerDownload(activeDetail.streamUrl, activeDetail.name) },
-                onEpisodeClick = { ep ->
-                    val epMedia = MediaItem(
-                        id = "ep_${ep.id}",
-                        name = "${activeDetail.name} • ${ep.title}",
-                        group = ep.season,
-                        posterUrl = activeDetail.posterUrl,
-                        streamUrl = ep.streamUrl,
-                        contentType = ContentType.MOVIE,
-                        badge = ep.season
-                    )
-                    playItem(epMedia)
-                },
-                onDownloadEpisode = { ep ->
-                    triggerDownload(ep.streamUrl, "${activeDetail.name} - ${ep.title}")
+        // Main Swipeable Tab Pager (stays mounted underneath detail & player so scroll positions never reset)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = backgroundScale
+                    scaleY = backgroundScale
                 }
-            )
-        } else {
-            Box(modifier = Modifier.fillMaxSize()) {
-                when (selectedTab) {
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                beyondViewportPageCount = 1,
+                userScrollEnabled = !detailOpen && activeVodItem == null && (activeLiveItem == null || isLiveMiniPlayer),
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                when (page) {
                     0 -> {
                         val movieAndSeriesFavs = remember(favorites) {
                             favorites.filter { it.contentType == ContentType.MOVIE || it.contentType == ContentType.SERIES }
@@ -947,11 +1046,13 @@ private fun AetherV2App(
                         SettingsScreen(
                             servers = servers,
                             activeServerId = activeServerId,
+                            themeMode = themeMode,
                             downloadMode = downloadMode,
                             downloadedFiles = downloadedFiles,
                             favoritesCount = favorites.size,
                             recentCount = recents.size,
                             extraBottomPadding = miniPlayerExtraPadding,
+                            onChangeThemeMode = onChangeThemeMode,
                             onSelectServer = { srv -> persistServers(servers, srv.id) },
                             onDeleteServer = { srv ->
                                 val remaining = servers.filterNot { it.id == srv.id }
@@ -1009,7 +1110,8 @@ private fun AetherV2App(
                         .navigationBarsPadding()
                         .padding(start = 16.dp, end = 16.dp, bottom = 74.dp + miniPlayerExtraPadding)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xEEFFFFFF))
+                        .background(MatteGlassTokens.SheetBg)
+                        .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(10.dp))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
@@ -1021,9 +1123,9 @@ private fun AetherV2App(
             }
 
             AnimatedVisibility(
-                visible = barsVisible,
-                enter = slideInVertically { it } + fadeIn(),
-                exit = slideOutVertically { it } + fadeOut(),
+                visible = barsVisible && !detailOpen,
+                enter = slideInVertically(tween(220, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(180)),
+                exit = slideOutVertically(tween(200, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(160)),
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 FloatingGlassNavBar(
@@ -1031,19 +1133,61 @@ private fun AetherV2App(
                     selectedIndex = selectedTab,
                     onSelect = { idx ->
                         selectedDetailItem = null
-                        selectedTab = idx
-                        searchQuery = ""
                         barsVisible = true
-                        if (idx == 1) ensureLiveCategories(forceNetwork = false)
-                        if (idx == 2) ensureVodCategories(forceNetwork = false)
-                        if (idx == 3) ensureSeriesCategories(forceNetwork = false)
-                        if (idx == 4) downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
+                        scope.launch { pagerState.animateScrollToPage(idx) }
+                    }
+                )
+            }
+
+            // Subtle dim scrim while detail screen slides over
+            if (backgroundScrimAlpha > 0.001f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = backgroundScrimAlpha))
+                )
+            }
+        }
+
+        // Slide-from-right animated Detail Screen overlay
+        AnimatedVisibility(
+            visible = detailOpen,
+            enter = slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(200)),
+            exit = slideOutHorizontally(tween(260, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(180)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            val shownDetail = selectedDetailItem ?: lastRenderedDetailItem
+            if (shownDetail != null) {
+                MediaDetailScreen(
+                    item = shownDetail,
+                    detailInfo = detailInfo,
+                    episodes = detailEpisodes,
+                    isLoading = loadingDetail,
+                    isFavorite = favoriteIds.contains(shownDetail.id),
+                    onBack = { selectedDetailItem = null },
+                    onToggleFavorite = { toggleFavorite(shownDetail) },
+                    onWatchNow = { playItem(shownDetail) },
+                    onDownloadItem = { triggerDownload(shownDetail.streamUrl, shownDetail.name) },
+                    onEpisodeClick = { ep ->
+                        val epMedia = MediaItem(
+                            id = "ep_${ep.id}",
+                            name = "${shownDetail.name} • ${ep.title}",
+                            group = ep.season,
+                            posterUrl = shownDetail.posterUrl,
+                            streamUrl = ep.streamUrl,
+                            contentType = ContentType.MOVIE,
+                            badge = ep.season
+                        )
+                        playItem(epMedia)
+                    },
+                    onDownloadEpisode = { ep ->
+                        triggerDownload(ep.streamUrl, "${shownDetail.name} - ${ep.title}")
                     }
                 )
             }
         }
 
-        // Persistent YouTube-style Live TV Player (Expanded or Docked Mini-Player)
+        // Persistent YouTube-style Live TV Player (Expanded, Immersive Fullscreen, or Docked Blurred Mini-Player)
         activeLiveItem?.let { liveChannel ->
             val livePool = remember(shownLive, liveItems, allLiveCache, favorites) {
                 when {
@@ -1057,10 +1201,13 @@ private fun AetherV2App(
                 channel = liveChannel,
                 allChannels = livePool,
                 categories = liveCatNames,
+                selectedCategory = selectedLiveCat,
+                isLoadingCategory = isLoading,
                 favoriteIds = favoriteIds,
                 isMiniPlayer = isLiveMiniPlayer,
                 isInPipMode = isInPipMode,
-                barsVisible = barsVisible && selectedDetailItem == null,
+                barsVisible = barsVisible && !detailOpen,
+                onSelectCategory = { cat -> loadLiveCategory(cat, forceNetwork = false) },
                 onSwitchChannel = { next ->
                     recordRecent(next)
                     activeLiveItem = next
@@ -1077,7 +1224,7 @@ private fun AetherV2App(
             )
         }
 
-        // Fullscreen VOD / Movie / Series Episode Player Overlay (keeps underlying grid & scroll states alive)
+        // Fullscreen Immersive VOD / Movie / Series Episode Player
         activeVodItem?.let { playingVod ->
             PlayerScreen(
                 item = playingVod,
@@ -1124,7 +1271,8 @@ private fun AetherV2App(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(22.dp))
-                    .background(Color.White)
+                    .background(MatteGlassTokens.SheetBg)
+                    .border(1.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(22.dp))
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
@@ -1146,14 +1294,15 @@ private fun AetherV2App(
                 ) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MatteGlassTokens.CanvasWhite)
-                            .clickable {
+                            .livelyPress(pressedScale = 0.94f) {
                                 confirmAllTab = null
                                 if (targetTab == 1) loadLiveCategory("All", forceNetwork = false)
                                 if (targetTab == 2) loadVodCategory("All", forceNetwork = false)
                                 if (targetTab == 3) loadSeriesCategory("All", forceNetwork = false)
                             }
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MatteGlassTokens.SubtleSurface)
+                            .border(0.8.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
                             .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
                         Text("No (Use Cache)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary)
@@ -1161,17 +1310,17 @@ private fun AetherV2App(
                     Spacer(Modifier.width(8.dp))
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MatteGlassTokens.CharcoalPrimary)
-                            .clickable {
+                            .livelyPress(pressedScale = 0.94f) {
                                 confirmAllTab = null
                                 if (targetTab == 1) loadLiveCategory("All", forceNetwork = true)
                                 if (targetTab == 2) loadVodCategory("All", forceNetwork = true)
                                 if (targetTab == 3) loadSeriesCategory("All", forceNetwork = true)
                             }
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MatteGlassTokens.CharcoalPrimary)
                             .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
-                        Text("Yes (Update)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text("Yes (Update)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CanvasWhite)
                     }
                 }
             }
@@ -1185,7 +1334,8 @@ private fun AetherV2App(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(22.dp))
-                    .background(Color.White)
+                    .background(MatteGlassTokens.SheetBg)
+                    .border(1.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(22.dp))
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -1203,27 +1353,28 @@ private fun AetherV2App(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MatteGlassTokens.CharcoalPrimary)
-                        .clickable {
+                        .livelyPress(pressedScale = 0.96f) {
                             pendingDownloadTarget = null
                             MediaDownloadHelper.startBuiltInDownload(context, dlUrl, dlTitle)
                             downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
                         }
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MatteGlassTokens.CharcoalPrimary)
                         .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Built-in Downloader", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text("Built-in Downloader", color = MatteGlassTokens.CanvasWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MatteGlassTokens.CanvasWhite)
-                        .clickable {
+                        .livelyPress(pressedScale = 0.96f) {
                             pendingDownloadTarget = null
                             MediaDownloadHelper.startExternalDownload(context, dlUrl, dlTitle)
                         }
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MatteGlassTokens.SubtleSurface)
+                        .border(0.8.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
                         .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {

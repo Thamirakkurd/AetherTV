@@ -1,8 +1,7 @@
 package com.aethertv.v2.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -22,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -35,6 +35,7 @@ import com.aethertv.v2.data.MediaDetailInfo
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.components.GlassCircleActionButton
 import com.aethertv.v2.ui.theme.MatteGlassTokens
+import com.aethertv.v2.ui.theme.livelyPress
 
 @Composable
 fun MediaDetailScreen(
@@ -59,6 +60,7 @@ fun MediaDetailScreen(
 
     val heroImage = item.posterUrl?.takeIf { it.isNotBlank() } ?: detailInfo.backdropUrl
     val showMovieDownload = item.contentType != ContentType.SERIES && item.contentType != ContentType.LIVE
+    val topScrimColor = if (MatteGlassTokens.isDark) Color.Black.copy(alpha = 0.52f) else Color.White.copy(alpha = 0.45f)
 
     LazyColumn(
         modifier = modifier
@@ -74,7 +76,11 @@ fun MediaDetailScreen(
                         .matchParentSize()
                         .background(
                             Brush.verticalGradient(
-                                listOf(Color(0xFFD4D4D8), Color(0xFF71717A), Color(0xFFFFFFFF))
+                                listOf(
+                                    Color(0xFF2B3240),
+                                    Color(0xFF1A1F29),
+                                    MatteGlassTokens.CanvasWhite
+                                )
                             )
                         )
                 )
@@ -92,24 +98,20 @@ fun MediaDetailScreen(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .fillMaxWidth()
-                        .height(84.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.White.copy(alpha = 0.55f), Color.Transparent)
-                            )
-                        )
+                        .height(92.dp)
+                        .background(Brush.verticalGradient(colors = listOf(topScrimColor, Color.Transparent)))
                 )
 
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(190.dp)
+                        .height(210.dp)
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
                                     Color.Transparent,
-                                    MatteGlassTokens.CanvasWhite.copy(alpha = 0.78f),
+                                    MatteGlassTokens.CanvasWhite.copy(alpha = 0.80f),
                                     MatteGlassTokens.CanvasWhite
                                 )
                             )
@@ -212,53 +214,42 @@ fun MediaDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MatteGlassTokens.CharcoalPrimary,
-                        shadowElevation = 0.dp,
+                    Row(
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable {
+                            .livelyPress(pressedScale = 0.96f, depthShiftPx = 3f) {
                                 if (item.contentType == ContentType.SERIES && episodes.isNotEmpty()) {
                                     onEpisodeClick(episodes.first())
                                 } else {
                                     onWatchNow()
                                 }
                             }
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MatteGlassTokens.CharcoalPrimary),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.PlayArrow, null, tint = MatteGlassTokens.CanvasWhite, modifier = Modifier.size(22.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(ctaLabel, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CanvasWhite)
-                        }
+                        Icon(Icons.Default.PlayArrow, null, tint = MatteGlassTokens.CanvasWhite, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(ctaLabel, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CanvasWhite)
                     }
 
                     if (showMovieDownload) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MatteGlassTokens.HeaderPillBg,
-                            border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-                            shadowElevation = 0.dp,
+                        Row(
                             modifier = Modifier
                                 .height(50.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable { onDownloadItem() }
+                                .livelyPress(pressedScale = 0.95f, depthShiftPx = 3f, onClick = onDownloadItem)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MatteGlassTokens.CardGlassBg)
+                                .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Download, "Download", tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Download", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary)
-                            }
+                            Icon(Icons.Default.Download, "Download", tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Download", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary)
                         }
                     }
                 }
@@ -267,7 +258,7 @@ fun MediaDetailScreen(
                     Spacer(Modifier.height(14.dp))
                     LinearProgressIndicator(
                         color = MatteGlassTokens.CharcoalPrimary,
-                        trackColor = MatteGlassTokens.HeaderPillBg,
+                        trackColor = MatteGlassTokens.FieldGlassBg,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -303,19 +294,23 @@ fun MediaDetailScreen(
                     ) {
                         items(seasons) { season ->
                             val selected = season == selectedSeason
-                            Surface(
-                                shape = CircleShape,
-                                color = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.HeaderPillBg,
-                                border = if (selected) null else BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-                                shadowElevation = 0.dp,
-                                modifier = Modifier.clip(CircleShape).clickable { selectedSeason = season }
+                            Box(
+                                modifier = Modifier
+                                    .livelyPress(pressedScale = 0.94f) { selectedSeason = season }
+                                    .clip(CircleShape)
+                                    .background(if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.FieldGlassBg)
+                                    .border(
+                                        0.8.dp,
+                                        if (selected) SolidColor(MatteGlassTokens.CharcoalPrimary) else MatteGlassTokens.SpecularBorderBrush,
+                                        CircleShape
+                                    )
+                                    .padding(horizontal = 14.dp, vertical = 7.dp)
                             ) {
                                 Text(
                                     text = season,
                                     fontSize = 12.sp,
                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                                    color = if (selected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                                    color = if (selected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary
                                 )
                             }
                         }
@@ -325,31 +320,26 @@ fun MediaDetailScreen(
             }
 
             items(visibleEpisodes, key = { it.id }) { ep ->
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MatteGlassTokens.HeaderPillBg,
-                    border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-                    shadowElevation = 0.dp,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 4.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { onEpisodeClick(ep) }
+                        .livelyPress(pressedScale = 0.975f, depthShiftPx = 2f) { onEpisodeClick(ep) }
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MatteGlassTokens.CardGlassBg)
+                        .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
+                        .padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(
-                        modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(ep.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(ep.season, fontSize = 12.sp, color = MatteGlassTokens.CharcoalMuted)
-                        }
-                        IconButton(onClick = { onDownloadEpisode(ep) }) {
-                            Icon(Icons.Default.Download, "Download episode", tint = MatteGlassTokens.CharcoalAction, modifier = Modifier.size(20.dp))
-                        }
-                        Icon(Icons.Default.PlayArrow, "Play episode", tint = MatteGlassTokens.CharcoalAction, modifier = Modifier.padding(end = 6.dp).size(20.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(ep.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(ep.season, fontSize = 12.sp, color = MatteGlassTokens.CharcoalMuted)
                     }
+                    IconButton(onClick = { onDownloadEpisode(ep) }) {
+                        Icon(Icons.Default.Download, "Download episode", tint = MatteGlassTokens.CharcoalAction, modifier = Modifier.size(20.dp))
+                    }
+                    Icon(Icons.Default.PlayArrow, "Play episode", tint = MatteGlassTokens.CharcoalAction, modifier = Modifier.padding(end = 6.dp).size(20.dp))
                 }
             }
         }
@@ -358,11 +348,12 @@ fun MediaDetailScreen(
 
 @Composable
 private fun DetailPill(text: String) {
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = MatteGlassTokens.HeaderPillBg,
-        border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-        shadowElevation = 0.dp
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MatteGlassTokens.CardGlassBg)
+            .border(0.8.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
         Text(
             text = text,
@@ -370,8 +361,7 @@ private fun DetailPill(text: String) {
             fontWeight = FontWeight.SemiBold,
             color = MatteGlassTokens.CharcoalPrimary,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

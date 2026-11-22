@@ -1,14 +1,14 @@
 package com.aethertv.v2.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -37,11 +37,13 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.components.UnifiedMediaTopBar
+import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
+import com.aethertv.v2.ui.theme.livelyPress
+import dev.chrisbanes.haze.hazeSource
 
-private val ChannelRowShape = RoundedCornerShape(8.dp)
-private val ChannelLogoShape = RoundedCornerShape(6.dp)
-private val ChannelBorder = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder)
+private val ChannelRowShape = RoundedCornerShape(12.dp)
+private val ChannelLogoShape = RoundedCornerShape(8.dp)
 
 @Composable
 fun LiveTvScreen(
@@ -62,74 +64,73 @@ fun LiveTvScreen(
     onMoreClick: (MediaItem) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val hazeState = LocalHazeState.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MatteGlassTokens.CanvasWhite)
-    ) {
-        if (items.isEmpty() && !isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = emptyMessage,
-                    fontSize = 14.sp,
-                    color = MatteGlassTokens.CharcoalMuted
-                )
-            }
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 12.dp,
-                    end = 12.dp,
-                    top = topInset + 62.dp,
-                    bottom = navInset + 84.dp + extraBottomPadding
-                ),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(items, key = { it.id }, contentType = { "live_channel" }) { channel ->
-                    val isFav = favoriteIds.contains(channel.id)
-                    val subtitleText = remember(channel.group, channel.badge) {
-                        buildString {
-                            if (channel.group.isNotBlank()) append(channel.group)
-                            val extra = channel.badge.trim()
-                            if (extra.isNotBlank() && !extra.equals("LIVE", ignoreCase = true)) {
-                                if (isNotEmpty()) append(" • ")
-                                append(extra)
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (hazeState != null) Modifier.hazeSource(hazeState) else Modifier)
+                .background(MatteGlassTokens.AmbientCanvasBrush)
+        ) {
+            if (items.isEmpty() && !isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = emptyMessage,
+                        fontSize = 14.sp,
+                        color = MatteGlassTokens.CharcoalMuted
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = 12.dp,
+                        end = 12.dp,
+                        top = topInset + 64.dp,
+                        bottom = navInset + 86.dp + extraBottomPadding
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(items, key = { it.id }, contentType = { "live_channel" }) { channel ->
+                        val isFav = favoriteIds.contains(channel.id)
+                        val subtitleText = remember(channel.group, channel.badge) {
+                            buildString {
+                                if (channel.group.isNotBlank()) append(channel.group)
+                                val extra = channel.badge.trim()
+                                if (extra.isNotBlank() && !extra.equals("LIVE", ignoreCase = true)) {
+                                    if (isNotEmpty()) append(" • ")
+                                    append(extra)
+                                }
                             }
                         }
-                    }
-                    val logoReq = remember(channel.posterUrl) {
-                        channel.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
-                            ImageRequest.Builder(context)
-                                .data(url)
-                                .crossfade(true)
-                                .size(144, 144)
-                                .build()
+                        val logoReq = remember(channel.posterUrl) {
+                            channel.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                                ImageRequest.Builder(context)
+                                    .data(url)
+                                    .crossfade(true)
+                                    .size(144, 144)
+                                    .build()
+                            }
                         }
-                    }
 
-                    Surface(
-                        shape = ChannelRowShape,
-                        color = MatteGlassTokens.CanvasWhite,
-                        border = ChannelBorder,
-                        shadowElevation = 0.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(ChannelRowShape)
-                            .clickable { onPlayClick(channel) }
-                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .livelyPress(pressedScale = 0.978f, depthShiftPx = 2.5f) {
+                                    onPlayClick(channel)
+                                }
+                                .clip(ChannelRowShape)
+                                .background(MatteGlassTokens.CardGlassBg)
+                                .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, ChannelRowShape)
                                 .padding(start = 10.dp, end = 4.dp, top = 9.dp, bottom = 9.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -138,7 +139,7 @@ fun LiveTvScreen(
                                     .size(46.dp)
                                     .clip(ChannelLogoShape)
                                     .background(MatteGlassTokens.SubtleSurface)
-                                    .border(ChannelBorder, ChannelLogoShape),
+                                    .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, ChannelLogoShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (logoReq != null) {
@@ -183,17 +184,18 @@ fun LiveTvScreen(
 
                             Spacer(Modifier.width(6.dp))
 
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MatteGlassTokens.HeaderPillBg,
-                                border = ChannelBorder
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(MatteGlassTokens.FieldGlassBg)
+                                    .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(5.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     text = "LIVE",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = MatteGlassTokens.CharcoalPrimary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    color = MatteGlassTokens.CharcoalPrimary
                                 )
                             }
 
@@ -228,8 +230,8 @@ fun LiveTvScreen(
 
         AnimatedVisibility(
             visible = topBarVisible,
-            enter = slideInVertically { -it } + fadeIn(),
-            exit = slideOutVertically { -it } + fadeOut(),
+            enter = slideInVertically(tween(220, easing = FastOutSlowInEasing)) { -it } + fadeIn(tween(180)),
+            exit = slideOutVertically(tween(200, easing = FastOutSlowInEasing)) { -it } + fadeOut(tween(160)),
             modifier = Modifier.align(Alignment.TopCenter)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -244,7 +246,7 @@ fun LiveTvScreen(
                 if (isLoading) {
                     LinearProgressIndicator(
                         color = MatteGlassTokens.CharcoalPrimary,
-                        trackColor = MatteGlassTokens.HeaderPillBg,
+                        trackColor = MatteGlassTokens.FieldGlassBg,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

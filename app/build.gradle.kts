@@ -21,8 +21,8 @@ android {
         applicationId = "com.aethertv.v2"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "3.0.0"
+        versionCode = 5
+        versionName = "3.2.0"
     }
 
     buildTypes {
@@ -57,6 +57,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Real-time hardware backdrop blur for Liquid Glass
+    implementation("dev.chrisbanes.haze:haze:1.3.1")
 
     // Media3 ExoPlayer
     implementation("androidx.media3:media3-exoplayer:1.4.1")

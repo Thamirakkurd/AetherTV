@@ -1,6 +1,8 @@
 package com.aethertv.v2.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -23,7 +25,9 @@ import androidx.compose.ui.unit.sp
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.components.PosterMediaCard
 import com.aethertv.v2.ui.components.UnifiedMediaTopBar
+import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
+import dev.chrisbanes.haze.hazeSource
 
 @Composable
 fun MediaGridScreen(
@@ -45,62 +49,66 @@ fun MediaGridScreen(
     onPlayClick: (MediaItem) -> Unit,
     onMoreClick: (MediaItem) -> Unit = onItemClick
 ) {
+    val hazeState = LocalHazeState.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MatteGlassTokens.CanvasWhite)
-    ) {
-        if (items.isEmpty() && !isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = emptyMessage,
-                    fontSize = 14.sp,
-                    color = MatteGlassTokens.CharcoalMuted
-                )
-            }
-        } else {
-            LazyVerticalGrid(
-                state = gridState,
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 6.dp,
-                    end = 6.dp,
-                    top = topInset + 60.dp,
-                    bottom = navInset + 84.dp + extraBottomPadding
-                ),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(items, key = { it.id }, contentType = { "poster_card" }) { item ->
-                    PosterMediaCard(
-                        item = item,
-                        isFavorite = favoriteIds.contains(item.id),
-                        onCardClick = { onItemClick(item) },
-                        onFavoriteClick = { onFavoriteClick(item) },
-                        onPlayClick = { onPlayClick(item) },
-                        onMoreClick = { onMoreClick(item) },
-                        isLarge = false,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(0.56f)
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (hazeState != null) Modifier.hazeSource(hazeState) else Modifier)
+                .background(MatteGlassTokens.AmbientCanvasBrush)
+        ) {
+            if (items.isEmpty() && !isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = emptyMessage,
+                        fontSize = 14.sp,
+                        color = MatteGlassTokens.CharcoalMuted
                     )
+                }
+            } else {
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = 8.dp,
+                        end = 8.dp,
+                        top = topInset + 62.dp,
+                        bottom = navInset + 86.dp + extraBottomPadding
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(items, key = { it.id }, contentType = { "poster_card" }) { item ->
+                        PosterMediaCard(
+                            item = item,
+                            isFavorite = favoriteIds.contains(item.id),
+                            onCardClick = { onItemClick(item) },
+                            onFavoriteClick = { onFavoriteClick(item) },
+                            onPlayClick = { onPlayClick(item) },
+                            onMoreClick = { onMoreClick(item) },
+                            isLarge = false,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(0.56f)
+                        )
+                    }
                 }
             }
         }
 
         AnimatedVisibility(
             visible = topBarVisible,
-            enter = slideInVertically { -it } + fadeIn(),
-            exit = slideOutVertically { -it } + fadeOut(),
+            enter = slideInVertically(tween(220, easing = FastOutSlowInEasing)) { -it } + fadeIn(tween(180)),
+            exit = slideOutVertically(tween(200, easing = FastOutSlowInEasing)) { -it } + fadeOut(tween(160)),
             modifier = Modifier.align(Alignment.TopCenter)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -115,7 +123,7 @@ fun MediaGridScreen(
                 if (isLoading) {
                     LinearProgressIndicator(
                         color = MatteGlassTokens.CharcoalPrimary,
-                        trackColor = MatteGlassTokens.HeaderPillBg,
+                        trackColor = MatteGlassTokens.FieldGlassBg,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

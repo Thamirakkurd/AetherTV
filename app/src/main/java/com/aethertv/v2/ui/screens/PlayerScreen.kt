@@ -3,7 +3,9 @@ package com.aethertv.v2.ui.screens
 import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.media.AudioManager
 import android.net.Uri
+import android.provider.Settings
 import android.util.TypedValue
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -12,11 +14,18 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.OptIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -24,10 +33,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Brightness6
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ClosedCaption
@@ -55,12 +69,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +86,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem as ExoMediaItem
 import androidx.media3.common.MimeTypes
@@ -90,32 +111,94 @@ import com.aethertv.v2.data.ContentType
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.data.OnlineSubtitleResult
 import com.aethertv.v2.data.OnlineSubtitleService
+import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
+import com.aethertv.v2.ui.theme.liquidGlassSurface
+import com.aethertv.v2.ui.theme.livelyPress
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
+import kotlin.math.roundToInt
 
-private val YouTubeAmbientBg = Brush.verticalGradient(
+private enum class GestureHudType { BRIGHTNESS, VOLUME }
+
+private val LightYouTubeAmbientBg = Brush.verticalGradient(
     colorStops = arrayOf(
         0.00f to Color(0xFF14171D),
-        0.14f to Color(0xFF282D37),
-        0.28f to Color(0xFFDDE2EA),
-        0.52f to Color(0xFFF1F3F6),
+        0.15f to Color(0xFF282D37),
+        0.30f to Color(0xFFDDE2EA),
+        0.54f to Color(0xFFF1F3F6),
         1.00f to Color(0xFFF8F9FB)
     )
 )
 
-private val ChannelBannerBrush = Brush.linearGradient(
-    colors = listOf(Color(0xFF1A1F29), Color(0xFF2B3240), Color(0xFF161A22))
+private val DarkYouTubeAmbientBg = Brush.verticalGradient(
+    colorStops = arrayOf(
+        0.00f to Color(0xFF06080C),
+        0.18f to Color(0xFF121826),
+        0.42f to Color(0xFF0A0E16),
+        1.00f to Color(0xFF070A0F)
+    )
 )
 
-@OptIn(UnstableApi::class)
+private val ChannelBannerBrush = Brush.linearGradient(
+    colors = listOf(Color(0xFF171C26), Color(0xFF283142), Color(0xFF12161E))
+)
+
+@Composable
+private fun ImmersiveFullscreenEffect(enabled: Boolean) {
+    val view = LocalView.current
+    val activity = LocalContext.current as? Activity
+
+    DisposableEffect(enabled, activity, view) {
+        val window = activity?.window
+        if (window != null) {
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (enabled) {
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        onDispose {
+            val w = activity?.window
+            if (w != null && enabled) {
+                WindowCompat.getInsetsController(w, view)
+                    .show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+}
+
+private fun readCurrentBrightness(context: Context, activity: Activity?): Float {
+    val windowVal = activity?.window?.attributes?.screenBrightness ?: -1f
+    if (windowVal in 0f..1f) return windowVal
+    return try {
+        val sys = Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
+        (sys / 255f).coerceIn(0.05f, 1f)
+    } catch (_: Exception) {
+        0.5f
+    }
+}
+
+private fun applyWindowBrightness(activity: Activity?, value: Float) {
+    val window = activity?.window ?: return
+    val lp = window.attributes
+    lp.screenBrightness = value.coerceIn(0.02f, 1f)
+    window.attributes = lp
+}
+
+@androidx.annotation.OptIn(UnstableApi::class)
 private fun createAetherExoPlayer(context: Context): ExoPlayer {
     val httpFactory = DefaultHttpDataSource.Factory()
-        .setUserAgent("AetherTV/3.0 (Android)")
+        .setUserAgent("AetherTV/3.2 (Android)")
         .setAllowCrossProtocolRedirects(true)
         .setConnectTimeoutMs(15000)
         .setReadTimeoutMs(20000)
@@ -163,7 +246,7 @@ private suspend fun shiftSubtitleFile(
     }
 }
 
-@OptIn(UnstableApi::class)
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
     item: MediaItem,
@@ -175,7 +258,10 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val scope = rememberCoroutineScope()
+
+    ImmersiveFullscreenEffect(enabled = !isInPipMode)
 
     var isPlaying by remember { mutableStateOf(true) }
     var isBuffering by remember { mutableStateOf(true) }
@@ -185,6 +271,18 @@ fun PlayerScreen(
     var durationMs by remember { mutableLongStateOf(0L) }
     var resizeModeIndex by remember { mutableIntStateOf(0) }
     var isLandscape by remember { mutableStateOf(false) }
+
+    // Brightness / Volume gesture HUD
+    var activeHud by remember { mutableStateOf<GestureHudType?>(null) }
+    var hudValue by remember { mutableFloatStateOf(0.5f) }
+    var hudStamp by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(hudStamp) {
+        if (activeHud != null) {
+            delay(1100)
+            activeHud = null
+        }
+    }
 
     var videoResolution by remember { mutableStateOf("") }
     var videoCodec by remember { mutableStateOf("") }
@@ -356,7 +454,50 @@ fun PlayerScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
-            .clickable { controlsVisible = !controlsVisible }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { controlsVisible = !controlsVisible }
+                )
+            }
+            .pointerInput(isInPipMode) {
+                if (isInPipMode) return@pointerInput
+                var isLeftSide = true
+                var level = 0.5f
+                var lastAppliedVol = -1
+                val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+
+                detectVerticalDragGestures(
+                    onDragStart = { startOffset ->
+                        isLeftSide = startOffset.x < size.width / 2f
+                        if (isLeftSide) {
+                            level = readCurrentBrightness(context, activity)
+                            activeHud = GestureHudType.BRIGHTNESS
+                        } else {
+                            val cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                            lastAppliedVol = cur
+                            level = cur.toFloat() / maxVol.toFloat()
+                            activeHud = GestureHudType.VOLUME
+                        }
+                        hudValue = level
+                        hudStamp++
+                    },
+                    onVerticalDrag = { _, dragAmount ->
+                        val span = (size.height * 0.65f).coerceAtLeast(240f)
+                        level = (level - dragAmount / span).coerceIn(0f, 1f)
+                        hudValue = level
+                        hudStamp++
+                        if (isLeftSide) {
+                            applyWindowBrightness(activity, level)
+                        } else {
+                            val targetVol = (level * maxVol).roundToInt().coerceIn(0, maxVol)
+                            if (targetVol != lastAppliedVol) {
+                                lastAppliedVol = targetVol
+                                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+                            }
+                        }
+                    }
+                )
+            }
     ) {
         AndroidView(
             factory = { ctx ->
@@ -418,154 +559,186 @@ fun PlayerScreen(
             )
         }
 
-        if (controlsVisible && !isInPipMode) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.72f), Color.Transparent)))
-                    .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
-                    .align(Alignment.TopCenter),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                PlayerOverlayIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = item.name,
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    val stats = listOfNotNull(
-                        videoResolution.takeIf { it.isNotBlank() },
-                        videoCodec.takeIf { it.isNotBlank() },
-                        audioInfo.takeIf { it.isNotBlank() },
-                        bitrateInfo.takeIf { it.isNotBlank() }
-                    )
-                    Text(
-                        text = if (stats.isNotEmpty()) stats.joinToString(" • ") else item.group,
-                        color = Color.White.copy(alpha = 0.76f),
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                PlayerOverlayIconButton(Icons.Default.ClosedCaption, "Subtitles") { showSubtitleSheet = true }
-                PlayerOverlayIconButton(Icons.Default.ScreenRotation, "Rotate") {
-                    isLandscape = !isLandscape
-                    activity?.requestedOrientation = if (isLandscape) {
-                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                    } else {
-                        ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                    }
-                }
-                PlayerOverlayIconButton(Icons.Default.PictureInPictureAlt, "PiP", onEnterPip)
-                PlayerOverlayIconButton(Icons.Default.OpenInNew, "External Player", onOpenExternal)
+        // Brightness / Volume Gesture HUD Pill
+        AnimatedVisibility(
+            visible = activeHud != null && !isInPipMode,
+            enter = fadeIn(tween(120)),
+            exit = fadeOut(tween(220)),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 56.dp)
+        ) {
+            activeHud?.let { hudType ->
+                GestureFeedbackPill(type = hudType, progress = hudValue)
             }
+        }
 
-            Row(
-                modifier = Modifier.align(Alignment.Center),
-                horizontalArrangement = Arrangement.spacedBy(28.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (item.contentType != ContentType.LIVE) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.55f))
-                            .clickable { exoPlayer.seekTo((exoPlayer.currentPosition - 10_000L).coerceAtLeast(0L)) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Replay10, "-10s", tint = Color.White, modifier = Modifier.size(26.dp))
-                    }
-                }
-
-                Box(
+        // Smooth fade playback controls
+        AnimatedVisibility(
+            visible = controlsVisible && !isInPipMode,
+            enter = fadeIn(tween(180)),
+            exit = fadeOut(tween(200)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Row(
                     modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .clickable { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play() },
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.74f), Color.Transparent)))
+                        .displayCutoutPadding()
+                        .padding(horizontal = 14.dp, vertical = 14.dp)
+                        .align(Alignment.TopCenter),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = "Play/Pause",
-                        tint = Color.Black,
-                        modifier = Modifier.size(34.dp)
-                    )
-                }
+                    PlayerOverlayIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
 
-                if (item.contentType != ContentType.LIVE) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.55f))
-                            .clickable { exoPlayer.seekTo(exoPlayer.currentPosition + 10_000L) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Forward10, "+10s", tint = Color.White, modifier = Modifier.size(26.dp))
-                    }
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))))
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-                    .align(Alignment.BottomCenter)
-            ) {
-                if (item.contentType != ContentType.LIVE && durationMs > 0L) {
-                    Slider(
-                        value = currentPosMs.toFloat().coerceIn(0f, durationMs.toFloat()),
-                        onValueChange = { exoPlayer.seekTo(it.toLong()) },
-                        valueRange = 0f..durationMs.toFloat(),
-                        colors = SliderDefaults.colors(
-                            thumbColor = Color.White,
-                            activeTrackColor = Color(0xFFEF4444),
-                            inactiveTrackColor = Color.White.copy(alpha = 0.30f)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.name,
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                    )
+                        val stats = listOfNotNull(
+                            videoResolution.takeIf { it.isNotBlank() },
+                            videoCodec.takeIf { it.isNotBlank() },
+                            audioInfo.takeIf { it.isNotBlank() },
+                            bitrateInfo.takeIf { it.isNotBlank() }
+                        )
+                        Text(
+                            text = if (stats.isNotEmpty()) stats.joinToString(" • ") else item.group,
+                            color = Color.White.copy(alpha = 0.76f),
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    PlayerOverlayIconButton(Icons.Default.ClosedCaption, "Subtitles") { showSubtitleSheet = true }
+                    PlayerOverlayIconButton(Icons.Default.ScreenRotation, "Rotate") {
+                        isLandscape = !isLandscape
+                        activity?.requestedOrientation = if (isLandscape) {
+                            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                        } else {
+                            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        }
+                    }
+                    PlayerOverlayIconButton(Icons.Default.PictureInPictureAlt, "PiP", onEnterPip)
+                    PlayerOverlayIconButton(Icons.Default.OpenInNew, "External Player", onOpenExternal)
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(28.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val delayTag = if (subtitleDelayMs != 0L) " (${formatDelay(subtitleDelayMs)})" else ""
-                    Text(
-                        text = "${formatDuration(currentPosMs)} / ${formatDuration(durationMs)}  •  CC: $selectedSubtitleLabel$delayTag",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
+                    if (item.contentType != ContentType.LIVE) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .livelyPress(pressedScale = 0.88f) {
+                                    exoPlayer.seekTo((exoPlayer.currentPosition - 10_000L).coerceAtLeast(0L))
+                                }
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.55f))
+                                .border(0.8.dp, Color.White.copy(alpha = 0.24f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Replay10, "-10s", tint = Color.White, modifier = Modifier.size(26.dp))
+                        }
+                    }
 
-                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .livelyPress(pressedScale = 0.88f) {
+                                if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                            }
+                            .clip(CircleShape)
+                            .background(Color.White),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = "Play/Pause",
+                            tint = Color.Black,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
+
+                    if (item.contentType != ContentType.LIVE) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .livelyPress(pressedScale = 0.88f) {
+                                    exoPlayer.seekTo(exoPlayer.currentPosition + 10_000L)
+                                }
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.55f))
+                                .border(0.8.dp, Color.White.copy(alpha = 0.24f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Forward10, "+10s", tint = Color.White, modifier = Modifier.size(26.dp))
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.80f))))
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                        .align(Alignment.BottomCenter)
+                ) {
+                    if (item.contentType != ContentType.LIVE && durationMs > 0L) {
+                        Slider(
+                            value = currentPosMs.toFloat().coerceIn(0f, durationMs.toFloat()),
+                            onValueChange = { exoPlayer.seekTo(it.toLong()) },
+                            valueRange = 0f..durationMs.toFloat(),
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color.White,
+                                activeTrackColor = Color(0xFFEF4444),
+                                inactiveTrackColor = Color.White.copy(alpha = 0.30f)
+                            )
+                        )
+                    }
 
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.16f))
-                            .clickable { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.AspectRatio, "Aspect", tint = Color.White, modifier = Modifier.size(15.dp))
-                        Text(resizeModes[resizeModeIndex].second, color = Color.White, fontSize = 12.sp)
+                        val delayTag = if (subtitleDelayMs != 0L) " (${formatDelay(subtitleDelayMs)})" else ""
+                        Text(
+                            text = "${formatDuration(currentPosMs)} / ${formatDuration(durationMs)}  •  CC: $selectedSubtitleLabel$delayTag",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Row(
+                            modifier = Modifier
+                                .livelyPress(pressedScale = 0.92f) {
+                                    resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size
+                                }
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color.White.copy(alpha = 0.16f))
+                                .border(0.75.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.AspectRatio, "Aspect", tint = Color.White, modifier = Modifier.size(15.dp))
+                            Text(resizeModes[resizeModeIndex].second, color = Color.White, fontSize = 12.sp)
+                        }
                     }
                 }
             }
@@ -633,16 +806,19 @@ fun PlayerScreen(
     }
 }
 
-@OptIn(UnstableApi::class)
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun YouTubeLivePlayerOverlay(
     channel: MediaItem,
     allChannels: List<MediaItem>,
     categories: List<String>,
+    selectedCategory: String,
+    isLoadingCategory: Boolean,
     favoriteIds: Set<String>,
     isMiniPlayer: Boolean,
     isInPipMode: Boolean,
     barsVisible: Boolean,
+    onSelectCategory: (String) -> Unit,
     onSwitchChannel: (MediaItem) -> Unit,
     onToggleMinimize: (Boolean) -> Unit,
     onClose: () -> Unit,
@@ -653,7 +829,9 @@ fun YouTubeLivePlayerOverlay(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
-    val scope = rememberCoroutineScope()
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    val mainHazeState = LocalHazeState.current
+    val feedHazeState = remember { HazeState() }
 
     var isPlaying by remember { mutableStateOf(true) }
     var isBuffering by remember { mutableStateOf(true) }
@@ -661,6 +839,36 @@ fun YouTubeLivePlayerOverlay(
     var controlsVisible by remember { mutableStateOf(true) }
     var isFullscreen by remember { mutableStateOf(false) }
     var resizeModeIndex by remember { mutableIntStateOf(0) }
+    var showCategorySheet by remember { mutableStateOf(false) }
+
+    // Drag offsets for tactile minimize/maximize gesture tracking
+    var portraitDragY by remember { mutableFloatStateOf(0f) }
+    var miniDragY by remember { mutableFloatStateOf(0f) }
+    val animatedPortraitDragY by animateFloatAsState(
+        targetValue = portraitDragY,
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 480f),
+        label = "portraitDrag"
+    )
+    val animatedMiniDragY by animateFloatAsState(
+        targetValue = miniDragY,
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 480f),
+        label = "miniDrag"
+    )
+
+    // Brightness / Volume gesture HUD
+    var activeHud by remember { mutableStateOf<GestureHudType?>(null) }
+    var hudValue by remember { mutableFloatStateOf(0.5f) }
+    var hudStamp by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(hudStamp) {
+        if (activeHud != null) {
+            delay(1100)
+            activeHud = null
+        }
+    }
+
+    // Immersive fullscreen system bar hiding ONLY when fullscreen & not mini/PiP
+    ImmersiveFullscreenEffect(enabled = isFullscreen && !isMiniPlayer && !isInPipMode)
 
     var videoResolution by remember { mutableStateOf("") }
     var videoCodec by remember { mutableStateOf("") }
@@ -673,9 +881,6 @@ fun YouTubeLivePlayerOverlay(
     var selectedSubtitleLabel by remember { mutableStateOf("Auto") }
     var subtitleFontScale by remember { mutableFloatStateOf(1.0f) }
     var subtitleDelayMs by remember { mutableLongStateOf(0L) }
-
-    // Filter chip state for YouTube "Next Channels" feed
-    var feedFilter by remember(channel.id) { mutableStateOf("All") }
 
     val resizeModes = remember {
         listOf(
@@ -783,29 +988,21 @@ fun YouTubeLivePlayerOverlay(
         } else null
     }
 
-    val chipOptions = remember(channel.group, categories) {
+    val quickChips = remember(categories, selectedCategory) {
         buildList {
-            add("All")
-            if (channel.group.isNotBlank()) add(channel.group)
+            if (selectedCategory.isNotBlank()) add(selectedCategory)
             add("Favorites")
-            categories.filter { it != "All" && it != "Favorites" && it != channel.group }.take(8).forEach { add(it) }
+            categories.filter { it != selectedCategory && it != "Favorites" }.take(12).forEach { add(it) }
         }.distinct()
     }
 
     val feedChannels by produceState(
         initialValue = emptyList<MediaItem>(),
         allChannels,
-        channel.id,
-        feedFilter,
-        favoriteIds
+        channel.id
     ) {
         value = withContext(Dispatchers.Default) {
-            val base = allChannels.filterNot { it.id == channel.id }
-            when (feedFilter) {
-                "All" -> base.take(80)
-                "Favorites" -> base.filter { favoriteIds.contains(it.id) }.take(80)
-                else -> base.filter { it.group.equals(feedFilter, ignoreCase = true) }.ifEmpty { base }.take(80)
-            }
+            allChannels.filterNot { it.id == channel.id }.take(100)
         }
     }
 
@@ -823,111 +1020,205 @@ fun YouTubeLivePlayerOverlay(
         isFullscreen = false
     }
 
+    // 1. DOCKED MINI-PLAYER (with swipe-up-to-maximize + real-time blur)
     if (isMiniPlayer && !isInPipMode) {
         val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        val bottomOffset: Dp = if (barsVisible) navInset + 57.dp else navInset + 8.dp
+        val bottomOffset: Dp = if (barsVisible) navInset + 64.dp else navInset + 10.dp
+        val miniShape = RoundedCornerShape(14.dp)
 
         Box(modifier = Modifier.fillMaxSize()) {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = Color(0xFAF4F6F9),
-                border = BorderStroke(0.75.dp, Color(0x24181B20)),
-                shadowElevation = 8.dp,
+            Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(horizontal = 8.dp)
+                    .padding(horizontal = 10.dp)
                     .padding(bottom = bottomOffset)
+                    .graphicsLayer {
+                        translationY = animatedMiniDragY
+                    }
                     .fillMaxWidth()
                     .height(64.dp)
-                    .clickable { onToggleMinimize(false) }
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(114.dp)
-                            .fillMaxHeight()
-                            .background(Color.Black)
-                    ) {
-                        AndroidView(
-                            factory = { ctx ->
-                                PlayerView(ctx).apply {
-                                    player = exoPlayer
-                                    useController = false
-                                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                                    layoutParams = FrameLayout.LayoutParams(
-                                        ViewGroup.LayoutParams.MATCH_PARENT,
-                                        ViewGroup.LayoutParams.MATCH_PARENT
-                                    )
+                    .liquidGlassSurface(
+                        hazeState = mainHazeState,
+                        shape = miniShape,
+                        tintColor = MatteGlassTokens.NavGlassBg,
+                        fallbackColor = MatteGlassTokens.NavGlassFallback,
+                        blurRadius = 26.dp,
+                        borderWidth = 0.9.dp,
+                        borderBrush = MatteGlassTokens.SpecularBorderBrush
+                    )
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { onToggleMinimize(false) })
+                    }
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                if (miniDragY < -72f) {
+                                    miniDragY = 0f
+                                    onToggleMinimize(false)
+                                } else {
+                                    miniDragY = 0f
                                 }
                             },
-                            update = { it.player = exoPlayer },
-                            onRelease = { it.player = null },
-                            modifier = Modifier.fillMaxSize()
+                            onDragCancel = { miniDragY = 0f },
+                            onVerticalDrag = { _, dragAmount ->
+                                miniDragY = (miniDragY + dragAmount).coerceIn(-160f, 36f)
+                            }
                         )
-                    }
+                    },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(114.dp)
+                        .fillMaxHeight()
+                        .background(Color.Black)
+                ) {
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = exoPlayer
+                                useController = false
+                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                layoutParams = FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                            }
+                        },
+                        update = { it.player = exoPlayer },
+                        onRelease = { it.player = null },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
 
-                    Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(10.dp))
 
-                    Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = channel.name,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MatteGlassTokens.CharcoalPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFEF4444))
+                        )
+                        Spacer(Modifier.width(5.dp))
                         Text(
-                            text = channel.name,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MatteGlassTokens.CharcoalPrimary,
+                            text = channel.group.ifBlank { "LIVE" },
+                            fontSize = 11.sp,
+                            color = MatteGlassTokens.CharcoalMuted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(Modifier.height(2.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFEF4444))
-                            )
-                            Spacer(Modifier.width(5.dp))
-                            Text(
-                                text = channel.group.ifBlank { "LIVE" },
-                                fontSize = 11.sp,
-                                color = MatteGlassTokens.CharcoalMuted,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
                     }
+                }
 
-                    IconButton(onClick = { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play() }) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = "Play/Pause",
-                            tint = MatteGlassTokens.CharcoalPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                IconButton(onClick = { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play() }) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = "Play/Pause",
+                        tint = MatteGlassTokens.CharcoalPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
 
-                    IconButton(onClick = onClose) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close mini player",
-                            tint = MatteGlassTokens.CharcoalMuted,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                IconButton(onClick = onClose) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close mini player",
+                        tint = MatteGlassTokens.CharcoalMuted,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
         }
         return
     }
 
+    // 2. FULLSCREEN IMMERSIVE LIVE PLAYER (3-zone gestures: Left=Brightness, Mid-Down=Minimize, Right=Volume)
     if (isFullscreen || isInPipMode) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
-                .clickable { controlsVisible = !controlsVisible }
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { controlsVisible = !controlsVisible })
+                }
+                .pointerInput(isInPipMode) {
+                    if (isInPipMode) return@pointerInput
+                    var zone = 1 // 0=left, 1=middle, 2=right
+                    var level = 0.5f
+                    var lastAppliedVol = -1
+                    var middleDragDown = 0f
+                    val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+
+                    detectVerticalDragGestures(
+                        onDragStart = { startOffset ->
+                            val third = size.width / 3f
+                            zone = when {
+                                startOffset.x < third -> 0
+                                startOffset.x > third * 2f -> 2
+                                else -> 1
+                            }
+                            middleDragDown = 0f
+                            when (zone) {
+                                0 -> {
+                                    level = readCurrentBrightness(context, activity)
+                                    activeHud = GestureHudType.BRIGHTNESS
+                                    hudValue = level
+                                    hudStamp++
+                                }
+                                2 -> {
+                                    val cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                    lastAppliedVol = cur
+                                    level = cur.toFloat() / maxVol.toFloat()
+                                    activeHud = GestureHudType.VOLUME
+                                    hudValue = level
+                                    hudStamp++
+                                }
+                            }
+                        },
+                        onDragEnd = {
+                            if (zone == 1 && middleDragDown > 96f) {
+                                isFullscreen = false
+                            }
+                            middleDragDown = 0f
+                        },
+                        onDragCancel = { middleDragDown = 0f },
+                        onVerticalDrag = { _, dragAmount ->
+                            val span = (size.height * 0.65f).coerceAtLeast(220f)
+                            when (zone) {
+                                0 -> {
+                                    level = (level - dragAmount / span).coerceIn(0f, 1f)
+                                    hudValue = level
+                                    hudStamp++
+                                    applyWindowBrightness(activity, level)
+                                }
+                                1 -> {
+                                    middleDragDown += dragAmount
+                                }
+                                2 -> {
+                                    level = (level - dragAmount / span).coerceIn(0f, 1f)
+                                    hudValue = level
+                                    hudStamp++
+                                    val targetVol = (level * maxVol).roundToInt().coerceIn(0, maxVol)
+                                    if (targetVol != lastAppliedVol) {
+                                        lastAppliedVol = targetVol
+                                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
         ) {
             AndroidView(
                 factory = { ctx ->
@@ -967,110 +1258,162 @@ fun YouTubeLivePlayerOverlay(
                 )
             }
 
-            if (controlsVisible && !isInPipMode) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.72f), Color.Transparent)))
-                        .statusBarsPadding()
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                        .align(Alignment.TopCenter),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    PlayerOverlayIconButton(Icons.Default.KeyboardArrowDown, "Exit fullscreen") { isFullscreen = false }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(channel.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (statsLine.isNotBlank()) {
-                            Text(statsLine, color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                    PlayerOverlayIconButton(Icons.Default.ClosedCaption, "Subtitles") { showSubtitleSheet = true }
-                    PlayerOverlayIconButton(Icons.Default.PictureInPictureAlt, "PiP", onEnterPip)
-                    PlayerOverlayIconButton(Icons.Default.OpenInNew, "External") { onOpenExternal(channel) }
-                }
+            AnimatedVisibility(
+                visible = activeHud != null && !isInPipMode,
+                enter = fadeIn(tween(120)),
+                exit = fadeOut(tween(220)),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 34.dp)
+            ) {
+                activeHud?.let { hudType -> GestureFeedbackPill(type = hudType, progress = hudValue) }
+            }
 
-                Row(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalArrangement = Arrangement.spacedBy(28.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (prevChannel != null) {
-                        PlayerOverlayIconButton(Icons.Default.SkipPrevious, "Previous channel") { onSwitchChannel(prevChannel) }
-                    }
-                    Box(
+            AnimatedVisibility(
+                visible = controlsVisible && !isInPipMode,
+                enter = fadeIn(tween(180)),
+                exit = fadeOut(tween(200)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Row(
                         modifier = Modifier
-                            .size(62.dp)
-                            .clip(CircleShape)
-                            .background(Color.White)
-                            .clickable { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play() },
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.74f), Color.Transparent)))
+                            .displayCutoutPadding()
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                            .align(Alignment.TopCenter),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play/Pause", tint = Color.Black, modifier = Modifier.size(34.dp))
-                    }
-                    if (nextChannel != null) {
-                        PlayerOverlayIconButton(Icons.Default.SkipNext, "Next channel") { onSwitchChannel(nextChannel) }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f))))
-                        .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                        .align(Alignment.BottomCenter),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Color(0xFFEF4444)))
-                        Spacer(Modifier.width(6.dp))
-                        Text("LIVE", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White.copy(alpha = 0.16f))
-                                .clickable { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }
-                                .padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.AspectRatio, "Aspect", tint = Color.White, modifier = Modifier.size(15.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(resizeModes[resizeModeIndex].second, color = Color.White, fontSize = 12.sp)
+                        PlayerOverlayIconButton(Icons.Default.KeyboardArrowDown, "Exit fullscreen") { isFullscreen = false }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(channel.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (statsLine.isNotBlank()) {
+                                Text(statsLine, color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
-                        PlayerOverlayIconButton(Icons.Default.FullscreenExit, "Exit fullscreen") { isFullscreen = false }
+                        PlayerOverlayIconButton(Icons.Default.ClosedCaption, "Subtitles") { showSubtitleSheet = true }
+                        PlayerOverlayIconButton(Icons.Default.PictureInPictureAlt, "PiP", onEnterPip)
+                        PlayerOverlayIconButton(Icons.Default.OpenInNew, "External") { onOpenExternal(channel) }
+                    }
+
+                    Row(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalArrangement = Arrangement.spacedBy(28.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (prevChannel != null) {
+                            PlayerOverlayIconButton(Icons.Default.SkipPrevious, "Previous channel") { onSwitchChannel(prevChannel) }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(62.dp)
+                                .livelyPress(pressedScale = 0.88f) {
+                                    if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                }
+                                .clip(CircleShape)
+                                .background(Color.White),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play/Pause", tint = Color.Black, modifier = Modifier.size(34.dp))
+                        }
+                        if (nextChannel != null) {
+                            PlayerOverlayIconButton(Icons.Default.SkipNext, "Next channel") { onSwitchChannel(nextChannel) }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.74f))))
+                            .padding(horizontal = 18.dp, vertical = 14.dp)
+                            .align(Alignment.BottomCenter),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Color(0xFFEF4444)))
+                            Spacer(Modifier.width(6.dp))
+                            Text("LIVE", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                modifier = Modifier
+                                    .livelyPress(pressedScale = 0.92f) {
+                                        resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size
+                                    }
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.White.copy(alpha = 0.16f))
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.AspectRatio, "Aspect", tint = Color.White, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(resizeModes[resizeModeIndex].second, color = Color.White, fontSize = 12.sp)
+                            }
+                            PlayerOverlayIconButton(Icons.Default.FullscreenExit, "Exit fullscreen") { isFullscreen = false }
+                        }
                     }
                 }
             }
         }
     } else {
+        // 3. PORTRAIT YOUTUBE-STYLE LIVE PLAYER + SCROLLABLE FEED + FLOATING BLUR CATEGORY SWITCHER
         val isFav = favoriteIds.contains(channel.id)
         val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val ambientBg = if (MatteGlassTokens.isDark) DarkYouTubeAmbientBg else LightYouTubeAmbientBg
+        val primaryText = MatteGlassTokens.CharcoalPrimary
+        val mutedText = MatteGlassTokens.CharcoalMuted
+        val activeCategoryLabel = selectedCategory.ifBlank { channel.group.ifBlank { "All Channels" } }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(YouTubeAmbientBg)
+                .graphicsLayer {
+                    translationY = animatedPortraitDragY.coerceAtLeast(0f)
+                    val shrink = (animatedPortraitDragY / 2400f).coerceIn(0f, 0.08f)
+                    scaleX = 1f - shrink
+                    scaleY = 1f - shrink
+                }
+                .background(ambientBg)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Status bar dark backdrop for seamless YouTube top video look
                 Spacer(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0E1014))
+                        .background(Color(0xFF0A0C10))
                         .windowInsetsTopHeight(WindowInsets.statusBars)
                 )
 
-                // Pinned 16:9 YouTube-style Live Player
+                // Pinned 16:9 Video Box (swipe down -> minimize, swipe up -> fullscreen)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 9f)
                         .background(Color.Black)
-                        .clickable { controlsVisible = !controlsVisible }
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = { controlsVisible = !controlsVisible })
+                        }
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures(
+                                onDragEnd = {
+                                    when {
+                                        portraitDragY > 110f -> {
+                                            portraitDragY = 0f
+                                            onToggleMinimize(true)
+                                        }
+                                        portraitDragY < -90f -> {
+                                            portraitDragY = 0f
+                                            isFullscreen = true
+                                        }
+                                        else -> portraitDragY = 0f
+                                    }
+                                },
+                                onDragCancel = { portraitDragY = 0f },
+                                onVerticalDrag = { _, dragAmount ->
+                                    portraitDragY = (portraitDragY + dragAmount).coerceIn(-160f, 340f)
+                                }
+                            )
+                        }
                 ) {
                     AndroidView(
                         factory = { ctx ->
@@ -1114,113 +1457,118 @@ fun YouTubeLivePlayerOverlay(
                         )
                     }
 
-                    if (controlsVisible) {
-                        // Top bar inside 16:9 player
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.65f), Color.Transparent)))
-                                .padding(horizontal = 8.dp, vertical = 6.dp)
-                                .align(Alignment.TopCenter),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { onToggleMinimize(true) }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.KeyboardArrowDown, "Minimize", tint = Color.White, modifier = Modifier.size(26.dp))
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = onEnterPip, modifier = Modifier.size(36.dp)) {
-                                    Icon(Icons.Default.PictureInPictureAlt, "PiP", tint = Color.White, modifier = Modifier.size(20.dp))
-                                }
-                                IconButton(onClick = { showSubtitleSheet = true }, modifier = Modifier.size(36.dp)) {
-                                    Icon(Icons.Default.ClosedCaption, "Subtitles", tint = Color.White, modifier = Modifier.size(21.dp))
-                                }
-                                IconButton(onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }, modifier = Modifier.size(36.dp)) {
-                                    Icon(Icons.Default.AspectRatio, "Aspect Ratio", tint = Color.White, modifier = Modifier.size(20.dp))
-                                }
-                            }
-                        }
-
-                        // Center Prev / Play-Pause / Next
-                        Row(
-                            modifier = Modifier.align(Alignment.Center),
-                            horizontalArrangement = Arrangement.spacedBy(28.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (prevChannel != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.45f))
-                                        .clickable { onSwitchChannel(prevChannel) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(22.dp))
-                                }
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(50.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.55f))
-                                    .clickable { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = "Play/Pause",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(30.dp)
-                                )
-                            }
-                            if (nextChannel != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.45f))
-                                        .clickable { onSwitchChannel(nextChannel) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(22.dp))
-                                }
-                            }
-                        }
-
-                        // Bottom bar inside 16:9 player
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))))
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                                .align(Alignment.BottomCenter),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    AnimatedVisibility(
+                        visible = controlsVisible,
+                        enter = fadeIn(tween(160)),
+                        exit = fadeOut(tween(180)),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color.Black.copy(alpha = 0.5f))
-                                    .padding(horizontal = 7.dp, vertical = 3.dp)
+                                    .fillMaxWidth()
+                                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.65f), Color.Transparent)))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                                    .align(Alignment.TopCenter),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFEF4444)))
-                                Spacer(Modifier.width(5.dp))
-                                Text(
-                                    text = if (videoResolution.isNotBlank()) "LIVE • $videoResolution" else "LIVE",
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                IconButton(onClick = { onToggleMinimize(true) }, modifier = Modifier.size(36.dp)) {
+                                    Icon(Icons.Default.KeyboardArrowDown, "Minimize", tint = Color.White, modifier = Modifier.size(26.dp))
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = onEnterPip, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Default.PictureInPictureAlt, "PiP", tint = Color.White, modifier = Modifier.size(20.dp))
+                                    }
+                                    IconButton(onClick = { showSubtitleSheet = true }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Default.ClosedCaption, "Subtitles", tint = Color.White, modifier = Modifier.size(21.dp))
+                                    }
+                                    IconButton(onClick = { resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Default.AspectRatio, "Aspect Ratio", tint = Color.White, modifier = Modifier.size(20.dp))
+                                    }
+                                }
                             }
-                            IconButton(onClick = { isFullscreen = true }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Fullscreen, "Fullscreen", tint = Color.White, modifier = Modifier.size(22.dp))
+
+                            Row(
+                                modifier = Modifier.align(Alignment.Center),
+                                horizontalArrangement = Arrangement.spacedBy(28.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (prevChannel != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .livelyPress(pressedScale = 0.88f) { onSwitchChannel(prevChannel) }
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.48f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(22.dp))
+                                    }
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(50.dp)
+                                        .livelyPress(pressedScale = 0.88f) {
+                                            if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                        }
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.56f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = "Play/Pause",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(30.dp)
+                                    )
+                                }
+                                if (nextChannel != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .livelyPress(pressedScale = 0.88f) { onSwitchChannel(nextChannel) }
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.48f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(22.dp))
+                                    }
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))))
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .align(Alignment.BottomCenter),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color.Black.copy(alpha = 0.5f))
+                                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                                ) {
+                                    Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFEF4444)))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text(
+                                        text = if (videoResolution.isNotBlank()) "LIVE • $videoResolution" else "LIVE",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                IconButton(onClick = { isFullscreen = true }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Fullscreen, "Fullscreen", tint = Color.White, modifier = Modifier.size(22.dp))
+                                }
                             }
                         }
                     }
 
-                    // Thin YouTube red live line at bottom edge of video
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -1230,12 +1578,14 @@ fun YouTubeLivePlayerOverlay(
                     )
                 }
 
-                // Scrollable YouTube-style feed below the video
+                // Scrollable channel feed (hazeSource for the real-time blurred bottom Category Switcher bar)
                 LazyColumn(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentPadding = PaddingValues(bottom = navInset + if (nextChannel != null) 78.dp else 20.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .hazeSource(feedHazeState),
+                    contentPadding = PaddingValues(bottom = navInset + 84.dp)
                 ) {
-                    // Title, metadata & channel action pills
                     item(key = "yt_header") {
                         Column(
                             modifier = Modifier
@@ -1248,20 +1598,19 @@ fun YouTubeLivePlayerOverlay(
                                     text = channel.name,
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF111317),
+                                    color = primaryText,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = statsLine.ifBlank { "Live TV Channel" },
                                     fontSize = 12.sp,
-                                    color = Color(0xFF4B5563),
+                                    color = mutedText,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
 
-                            // Channel avatar + Quick Action Pills (YouTube row)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1271,8 +1620,8 @@ fun YouTubeLivePlayerOverlay(
                                     modifier = Modifier
                                         .size(38.dp)
                                         .clip(CircleShape)
-                                        .background(Color.White)
-                                        .border(1.dp, Color(0x22000000), CircleShape),
+                                        .background(MatteGlassTokens.CardGlassBg)
+                                        .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (!channel.posterUrl.isNullOrBlank()) {
@@ -1283,31 +1632,28 @@ fun YouTubeLivePlayerOverlay(
                                             modifier = Modifier.fillMaxSize().padding(4.dp)
                                         )
                                     } else {
-                                        Icon(Icons.Default.LiveTv, null, tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.LiveTv, null, tint = primaryText, modifier = Modifier.size(18.dp))
                                     }
                                 }
 
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (isFav) Color(0xFF111317) else Color(0xFF18181B),
+                                Box(
                                     modifier = Modifier
+                                        .livelyPress(pressedScale = 0.93f) { onToggleFavorite(channel) }
                                         .clip(CircleShape)
-                                        .clickable { onToggleFavorite(channel) }
+                                        .background(MatteGlassTokens.CharcoalPrimary)
+                                        .padding(horizontal = 14.dp, vertical = 8.dp)
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             imageVector = if (isFav) Icons.Default.Star else Icons.Default.StarBorder,
                                             contentDescription = null,
-                                            tint = Color.White,
+                                            tint = MatteGlassTokens.CanvasWhite,
                                             modifier = Modifier.size(15.dp)
                                         )
                                         Spacer(Modifier.width(5.dp))
                                         Text(
                                             text = if (isFav) "Favorited" else "Favorite",
-                                            color = Color.White,
+                                            color = MatteGlassTokens.CanvasWhite,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
@@ -1318,54 +1664,56 @@ fun YouTubeLivePlayerOverlay(
                                     modifier = Modifier.weight(1f),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    item {
-                                        YouTubeActionPill(Icons.Default.OpenInNew, "External") { onOpenExternal(channel) }
-                                    }
-                                    item {
-                                        YouTubeActionPill(Icons.Default.PictureInPictureAlt, "PiP", onEnterPip)
-                                    }
-                                    item {
-                                        YouTubeActionPill(Icons.Default.ClosedCaption, "CC") { showSubtitleSheet = true }
-                                    }
-                                    item {
-                                        YouTubeActionPill(Icons.Default.Fullscreen, "Full") { isFullscreen = true }
-                                    }
+                                    item { YouTubeActionPill(Icons.Default.OpenInNew, "External") { onOpenExternal(channel) } }
+                                    item { YouTubeActionPill(Icons.Default.PictureInPictureAlt, "PiP", onEnterPip) }
+                                    item { YouTubeActionPill(Icons.Default.ClosedCaption, "CC") { showSubtitleSheet = true } }
+                                    item { YouTubeActionPill(Icons.Default.Fullscreen, "Full") { isFullscreen = true } }
                                 }
                             }
                         }
                     }
 
-                    // Category Filter Chips (matching YouTube video)
+                    // Quick category chips synced with active Live TV category
                     item(key = "yt_chips") {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(chipOptions, key = { it }) { chip ->
-                                val selected = chip == feedFilter
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (selected) Color(0xFF111317) else Color(0x18111317),
+                            items(quickChips, key = { it }) { chip ->
+                                val selected = chip == selectedCategory
+                                Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { feedFilter = chip }
+                                        .livelyPress(pressedScale = 0.94f) { onSelectCategory(chip) }
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.FieldGlassBg)
+                                        .border(
+                                            0.75.dp,
+                                            if (selected) SolidColor(MatteGlassTokens.CharcoalPrimary) else MatteGlassTokens.SpecularBorderBrush,
+                                            RoundedCornerShape(10.dp)
+                                        )
+                                        .padding(horizontal = 12.dp, vertical = 7.dp)
                                 ) {
                                     Text(
                                         text = chip,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = if (selected) Color.White else Color(0xFF18181B),
+                                        color = if (selected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
                                         maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
                         }
+                        if (isLoadingCategory) {
+                            LinearProgressIndicator(
+                                color = MatteGlassTokens.CharcoalPrimary,
+                                trackColor = MatteGlassTokens.FieldGlassBg,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)
+                            )
+                        }
                         Spacer(Modifier.height(6.dp))
                     }
 
-                    // YouTube-style "Next Channels" full-width video cards
                     items(feedChannels, key = { "yt_ch_${it.id}" }, contentType = { "yt_channel_card" }) { nextItem ->
                         YouTubeChannelFeedCard(
                             channel = nextItem,
@@ -1376,59 +1724,81 @@ fun YouTubeLivePlayerOverlay(
                 }
             }
 
-            // Floating bottom "Next: ..." queue bar (matching YouTube video)
-            if (nextChannel != null) {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = Color(0xF5ECEFF4),
-                    border = BorderStroke(0.75.dp, Color(0x22181B20)),
-                    shadowElevation = 6.dp,
+            // Floating bottom real-time blurred Liquid Glass CATEGORY SWITCHER bar (replaces "Next:")
+            val barShape = RoundedCornerShape(16.dp)
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .fillMaxWidth()
+                    .livelyPress(pressedScale = 0.975f, depthShiftPx = 2f) { showCategorySheet = true }
+                    .liquidGlassSurface(
+                        hazeState = feedHazeState,
+                        shape = barShape,
+                        tintColor = MatteGlassTokens.NavGlassBg,
+                        fallbackColor = MatteGlassTokens.NavGlassFallback,
+                        blurRadius = 26.dp,
+                        borderWidth = 0.9.dp,
+                        borderBrush = MatteGlassTokens.SpecularBorderBrush
+                    )
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { onSwitchChannel(nextChannel) }
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(MatteGlassTokens.FieldGlassBg)
+                        .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LiveTv,
-                            contentDescription = null,
-                            tint = MatteGlassTokens.CharcoalPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Next: ${nextChannel.name}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MatteGlassTokens.CharcoalPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = nextChannel.group.ifBlank { "Live TV" },
-                                fontSize = 11.sp,
-                                color = MatteGlassTokens.CharcoalMuted,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowUp,
-                            contentDescription = "Play Next",
-                            tint = MatteGlassTokens.CharcoalPrimary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Category,
+                        contentDescription = "Categories",
+                        tint = MatteGlassTokens.CharcoalPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = activeCategoryLabel,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MatteGlassTokens.CharcoalPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${allChannels.size} channels • Tap to switch category",
+                        fontSize = 11.sp,
+                        color = MatteGlassTokens.CharcoalMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowUp,
+                    contentDescription = "Change Category",
+                    tint = MatteGlassTokens.CharcoalPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
             }
         }
+    }
+
+    // Category Switcher Bottom Sheet
+    if (showCategorySheet) {
+        LiveCategoryPickerSheet(
+            categories = categories,
+            selectedCategory = selectedCategory,
+            onDismiss = { showCategorySheet = false },
+            onSelectCategory = { cat ->
+                showCategorySheet = false
+                onSelectCategory(cat)
+            }
+        )
     }
 
     if (showSubtitleSheet) {
@@ -1468,27 +1838,183 @@ fun YouTubeLivePlayerOverlay(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LiveCategoryPickerSheet(
+    categories: List<String>,
+    selectedCategory: String,
+    onDismiss: () -> Unit,
+    onSelectCategory: (String) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var filter by remember { mutableStateOf("") }
+    val filtered = remember(categories, filter) {
+        if (filter.isBlank()) categories
+        else categories.filter { it.contains(filter, ignoreCase = true) }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MatteGlassTokens.SheetBg,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Switch Live TV Category",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MatteGlassTokens.CharcoalPrimary
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MatteGlassTokens.FieldGlassBg)
+                    .border(0.8.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Search, null, tint = MatteGlassTokens.CharcoalMuted, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (filter.isEmpty()) {
+                        Text("Filter categories...", fontSize = 13.sp, color = MatteGlassTokens.CharcoalMuted)
+                    }
+                    BasicTextField(
+                        value = filter,
+                        onValueChange = { filter = it },
+                        singleLine = true,
+                        textStyle = TextStyle(fontSize = 13.sp, color = MatteGlassTokens.CharcoalPrimary),
+                        cursorBrush = SolidColor(MatteGlassTokens.CharcoalPrimary),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (filter.isNotEmpty()) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear",
+                        tint = MatteGlassTokens.CharcoalMuted,
+                        modifier = Modifier.size(17.dp).clickable { filter = "" }
+                    )
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(filtered, key = { it }) { cat ->
+                    val active = cat == selectedCategory
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .livelyPress(pressedScale = 0.975f) { onSelectCategory(cat) }
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (active) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CardGlassBg)
+                            .border(
+                                0.8.dp,
+                                if (active) SolidColor(MatteGlassTokens.CharcoalPrimary) else MatteGlassTokens.SpecularBorderBrush,
+                                RoundedCornerShape(12.dp)
+                            )
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = cat,
+                            fontSize = 14.sp,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                            color = if (active) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (active) {
+                            Icon(Icons.Default.Check, null, tint = MatteGlassTokens.CanvasWhite, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GestureFeedbackPill(
+    type: GestureHudType,
+    progress: Float
+) {
+    val pct = (progress * 100f).roundToInt().coerceIn(0, 100)
+    val icon = when {
+        type == GestureHudType.BRIGHTNESS -> Icons.Default.Brightness6
+        pct == 0 -> Icons.AutoMirrored.Filled.VolumeOff
+        else -> Icons.AutoMirrored.Filled.VolumeUp
+    }
+
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(Color(0xCC10141D))
+            .border(0.9.dp, Color.White.copy(alpha = 0.28f), CircleShape)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+        Box(
+            modifier = Modifier
+                .width(104.dp)
+                .height(5.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.25f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(progress.coerceIn(0f, 1f))
+                    .clip(CircleShape)
+                    .background(Color.White)
+            )
+        }
+        Text(
+            text = "$pct%",
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(34.dp),
+            textAlign = TextAlign.End
+        )
+    }
+}
+
 @Composable
 private fun YouTubeActionPill(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit
 ) {
-    Surface(
-        shape = CircleShape,
-        color = Color(0x16111317),
+    Row(
         modifier = Modifier
+            .livelyPress(pressedScale = 0.93f, onClick = onClick)
             .clip(CircleShape)
-            .clickable(onClick = onClick)
+            .background(MatteGlassTokens.FieldGlassBg)
+            .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, label, tint = Color(0xFF18181B), modifier = Modifier.size(15.dp))
-            Spacer(Modifier.width(5.dp))
-            Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFF18181B))
-        }
+        Icon(icon, label, tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MatteGlassTokens.CharcoalPrimary)
     }
 }
 
@@ -1512,10 +2038,9 @@ private fun YouTubeChannelFeedCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .livelyPress(pressedScale = 0.98f, depthShiftPx = 3f, onClick = onClick)
             .padding(bottom = 14.dp)
     ) {
-        // 16:9 YouTube-style banner thumbnail
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1539,13 +2064,13 @@ private fun YouTubeChannelFeedCard(
                 )
             }
 
-            // Bottom-right LIVE badge (like YouTube video duration badge)
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(10.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(5.dp))
                     .background(Color(0xCC0B0D11))
+                    .border(0.75.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(5.dp))
                     .padding(horizontal = 7.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1555,7 +2080,6 @@ private fun YouTubeChannelFeedCard(
             }
         }
 
-        // Metadata row below thumbnail (Avatar + Title/Group + More)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1566,8 +2090,8 @@ private fun YouTubeChannelFeedCard(
                 modifier = Modifier
                     .size(38.dp)
                     .clip(CircleShape)
-                    .background(Color.White)
-                    .border(1.dp, Color(0x1F000000), CircleShape),
+                    .background(MatteGlassTokens.CardGlassBg)
+                    .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 if (logoReq != null) {
@@ -1590,7 +2114,7 @@ private fun YouTubeChannelFeedCard(
                     fontSize = 14.sp,
                     lineHeight = 19.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF111317),
+                    color = MatteGlassTokens.CharcoalPrimary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1598,7 +2122,7 @@ private fun YouTubeChannelFeedCard(
                 Text(
                     text = "${channel.group.ifBlank { "Live TV" }} • Live stream",
                     fontSize = 12.sp,
-                    color = Color(0xFF525866),
+                    color = MatteGlassTokens.CharcoalMuted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1608,7 +2132,7 @@ private fun YouTubeChannelFeedCard(
                 Icon(
                     imageVector = Icons.Default.MoreVert,
                     contentDescription = "More options",
-                    tint = Color(0xFF3F4552),
+                    tint = MatteGlassTokens.CharcoalMuted,
                     modifier = Modifier.size(19.dp)
                 )
             }
@@ -1616,7 +2140,7 @@ private fun YouTubeChannelFeedCard(
     }
 }
 
-@kotlin.OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SubtitleSettingsSheet(
     mediaTitle: String,
@@ -1645,7 +2169,7 @@ private fun SubtitleSettingsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xF7F5F7FA),
+        containerColor = MatteGlassTokens.SheetBg,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Column(
@@ -1657,7 +2181,6 @@ private fun SubtitleSettingsSheet(
                 .padding(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Header with Title + Save / Done button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1676,310 +2199,302 @@ private fun SubtitleSettingsSheet(
                         color = MatteGlassTokens.CharcoalMuted
                     )
                 }
-                Surface(
-                    shape = CircleShape,
-                    color = MatteGlassTokens.CharcoalPrimary,
+                Box(
                     modifier = Modifier
+                        .livelyPress(pressedScale = 0.93f) { onSaveAndDone(draftScale, draftDelayMs) }
                         .clip(CircleShape)
-                        .clickable { onSaveAndDone(draftScale, draftDelayMs) }
+                        .background(MatteGlassTokens.CharcoalPrimary)
+                        .padding(horizontal = 16.dp, vertical = 9.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Check, null, tint = MatteGlassTokens.CanvasWhite, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(5.dp))
-                        Text("Done", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text("Done", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CanvasWhite)
                     }
                 }
             }
 
-            // Subtitle Sync / Timing Delay (Forward & Backward)
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, Color(0xFFE3E6EC))
+            // Subtitle Sync / Timing Delay
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MatteGlassTokens.CardGlassBg)
+                    .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Timing Delay", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Timing Delay", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = formatDelay(draftDelayMs),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (draftDelayMs == 0L) MatteGlassTokens.CharcoalMuted else MatteGlassTokens.CharcoalPrimary
+                        )
+                        if (draftDelayMs != 0L) {
                             Text(
-                                text = formatDelay(draftDelayMs),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (draftDelayMs == 0L) MatteGlassTokens.CharcoalMuted else MatteGlassTokens.CharcoalPrimary
-                            )
-                            if (draftDelayMs != 0L) {
-                                Text(
-                                    text = "Reset",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF2563EB),
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .clickable { draftDelayMs = 0L }
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf("-0.5s" to -500L, "-0.1s" to -100L, "+0.1s" to 100L, "+0.5s" to 500L).forEach { (label, delta) ->
-                            Box(
+                                text = "Reset",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF3B82F6),
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFFEFF1F5))
-                                    .border(0.75.dp, Color(0x22181B20), RoundedCornerShape(10.dp))
-                                    .clickable { draftDelayMs = (draftDelayMs + delta).coerceIn(-30_000L, 30_000L) }
-                                    .padding(vertical = 9.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary)
-                            }
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { draftDelayMs = 0L }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
                         }
                     }
-
-                    Text(
-                        text = if (hasExternalSub) {
-                            "Negative (-) shows subtitles earlier • Positive (+) shows them later"
-                        } else {
-                            "Tap Done to apply • Full +/- sync works best with local or online .srt/.vtt"
-                        },
-                        fontSize = 11.sp,
-                        color = MatteGlassTokens.CharcoalMuted
-                    )
                 }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("-0.5s" to -500L, "-0.1s" to -100L, "+0.1s" to 100L, "+0.5s" to 500L).forEach { (label, delta) ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .livelyPress(pressedScale = 0.93f) {
+                                    draftDelayMs = (draftDelayMs + delta).coerceIn(-30_000L, 30_000L)
+                                }
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MatteGlassTokens.FieldGlassBg)
+                                .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(10.dp))
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary)
+                        }
+                    }
+                }
+
+                Text(
+                    text = if (hasExternalSub) {
+                        "Negative (-) shows subtitles earlier • Positive (+) shows them later"
+                    } else {
+                        "Tap Done to apply • Full +/- sync works best with local or online .srt/.vtt"
+                    },
+                    fontSize = 11.sp,
+                    color = MatteGlassTokens.CharcoalMuted
+                )
             }
 
             // Text Size selector
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, Color(0xFFE3E6EC))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MatteGlassTokens.CardGlassBg)
+                    .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                Text("Text Size", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Text Size", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf("Small" to 0.8f, "Medium" to 1.0f, "Large" to 1.25f, "XL" to 1.5f).forEach { (label, scale) ->
-                            val active = draftScale == scale
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (active) MatteGlassTokens.CharcoalPrimary else Color(0xFFEFF1F5))
-                                    .clickable { draftScale = scale }
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (active) Color.White else MatteGlassTokens.CharcoalPrimary
-                                )
-                            }
+                    listOf("Small" to 0.8f, "Medium" to 1.0f, "Large" to 1.25f, "XL" to 1.5f).forEach { (label, scale) ->
+                        val active = draftScale == scale
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .livelyPress(pressedScale = 0.94f) { draftScale = scale }
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (active) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.FieldGlassBg)
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (active) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary
+                            )
                         }
                     }
                 }
             }
 
-            // Quick Track Controls (Off / Local / Embedded)
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, Color(0xFFE3E6EC))
+            // Track Source
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MatteGlassTokens.CardGlassBg)
+                    .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("Track Source", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (selectedLabel == "Off") MatteGlassTokens.CharcoalPrimary else Color(0xFFEFF1F5))
-                                .clickable { onSelectOff() }
-                                .padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "Turn Off",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (selectedLabel == "Off") Color.White else MatteGlassTokens.CharcoalPrimary
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFFEFF1F5))
-                                .clickable { onPickLocal() }
-                                .padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Icon(Icons.Default.FolderOpen, null, tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(15.dp))
-                                Text("Local .srt/.vtt", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary)
-                            }
+                Text("Track Source", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .livelyPress(pressedScale = 0.94f, onClick = onSelectOff)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (selectedLabel == "Off") MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.FieldGlassBg)
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Turn Off",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (selectedLabel == "Off") MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .livelyPress(pressedScale = 0.94f, onClick = onPickLocal)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MatteGlassTokens.FieldGlassBg)
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Icon(Icons.Default.FolderOpen, null, tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(15.dp))
+                            Text("Local .srt/.vtt", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary)
                         }
                     }
+                }
 
-                    if (embeddedTextGroups.isNotEmpty()) {
-                        embeddedTextGroups.forEachIndexed { idx, group ->
-                            val fmt = group.getTrackFormat(0)
-                            val trackLabel = fmt.label ?: fmt.language ?: "Track ${idx + 1}"
-                            val active = trackLabel == selectedLabel
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (active) Color(0xFFE9ECF1) else Color(0xFFF8F9FB))
-                                    .border(0.75.dp, if (active) MatteGlassTokens.CharcoalPrimary else Color(0xFFE3E6EC), RoundedCornerShape(10.dp))
-                                    .clickable { onSelectEmbeddedTrack(group, trackLabel) }
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(trackLabel, fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal, color = MatteGlassTokens.CharcoalPrimary)
-                                if (active) Icon(Icons.Default.Check, null, tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(16.dp))
-                            }
+                if (embeddedTextGroups.isNotEmpty()) {
+                    embeddedTextGroups.forEachIndexed { idx, group ->
+                        val fmt = group.getTrackFormat(0)
+                        val trackLabel = fmt.label ?: fmt.language ?: "Track ${idx + 1}"
+                        val active = trackLabel == selectedLabel
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .livelyPress(pressedScale = 0.97f) { onSelectEmbeddedTrack(group, trackLabel) }
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (active) MatteGlassTokens.FieldGlassBg else MatteGlassTokens.SubtleSurface)
+                                .border(0.75.dp, if (active) SolidColor(MatteGlassTokens.CharcoalPrimary) else MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(10.dp))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(trackLabel, fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal, color = MatteGlassTokens.CharcoalPrimary)
+                            if (active) Icon(Icons.Default.Check, null, tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
             }
 
             // Online Subtitles Search
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, Color(0xFFE3E6EC))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MatteGlassTokens.CardGlassBg)
+                    .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("Search Online Subtitles", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("English" to "eng", "Arabic" to "ara", "Kurdish" to "kur").forEach { (name, code) ->
-                            val selected = subLang == code
-                            Box(
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(if (selected) MatteGlassTokens.CharcoalPrimary else Color(0xFFEFF1F5))
-                                    .clickable { subLang = code }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    name,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (selected) Color.White else MatteGlassTokens.CharcoalMuted
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            singleLine = true,
-                            placeholder = { Text("Movie or show name", fontSize = 13.sp) },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
-                        )
+                Text("Search Online Subtitles", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("English" to "eng", "Arabic" to "ara", "Kurdish" to "kur").forEach { (name, code) ->
+                        val selected = subLang == code
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MatteGlassTokens.CharcoalPrimary)
-                                .clickable {
-                                    scope.launch {
-                                        searching = true
-                                        subResults = try {
-                                            OnlineSubtitleService.searchSubtitles(searchQuery, subLang)
-                                        } catch (_: Exception) {
-                                            emptyList()
-                                        }
-                                        searching = false
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
+                                .livelyPress(pressedScale = 0.93f) { subLang = code }
+                                .clip(CircleShape)
+                                .background(if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.FieldGlassBg)
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
-                            Icon(Icons.Default.Search, "Search", tint = Color.White)
+                            Text(
+                                name,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (selected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalMuted
+                            )
                         }
                     }
+                }
 
-                    if (searching) {
-                        Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = MatteGlassTokens.CharcoalPrimary)
-                        }
-                    } else if (subResults.isNotEmpty()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            subResults.take(10).forEach { sub ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(Color(0xFFF4F6F9))
-                                        .border(0.75.dp, Color(0xFFE3E6EC), RoundedCornerShape(10.dp))
-                                        .clickable { onDownloadAndApplyOnline(sub) }
-                                        .padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${sub.language} • ${sub.fileName}",
-                                        fontSize = 12.sp,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = MatteGlassTokens.CharcoalPrimary
-                                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        singleLine = true,
+                        placeholder = { Text("Movie or show name", fontSize = 13.sp) },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .livelyPress(pressedScale = 0.92f) {
+                                scope.launch {
+                                    searching = true
+                                    subResults = try {
+                                        OnlineSubtitleService.searchSubtitles(searchQuery, subLang)
+                                    } catch (_: Exception) {
+                                        emptyList()
+                                    }
+                                    searching = false
                                 }
+                            }
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MatteGlassTokens.CharcoalPrimary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Search, "Search", tint = MatteGlassTokens.CanvasWhite)
+                    }
+                }
+
+                if (searching) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = MatteGlassTokens.CharcoalPrimary)
+                    }
+                } else if (subResults.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        subResults.take(10).forEach { sub ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .livelyPress(pressedScale = 0.97f) { onDownloadAndApplyOnline(sub) }
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MatteGlassTokens.FieldGlassBg)
+                                    .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(10.dp))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${sub.language} • ${sub.fileName}",
+                                    fontSize = 12.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MatteGlassTokens.CharcoalPrimary
+                                )
                             }
                         }
                     }
                 }
             }
 
-            // Full-width bottom Save & Done CTA
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MatteGlassTokens.CharcoalPrimary,
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
+                    .livelyPress(pressedScale = 0.965f) { onSaveAndDone(draftScale, draftDelayMs) }
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable { onSaveAndDone(draftScale, draftDelayMs) }
+                    .background(MatteGlassTokens.CharcoalPrimary),
+                contentAlignment = Alignment.Center
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text("Save & Done", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                }
+                Text("Save & Done", color = MatteGlassTokens.CanvasWhite, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -1994,9 +2509,10 @@ private fun PlayerOverlayIconButton(
     Box(
         modifier = Modifier
             .size(38.dp)
+            .livelyPress(pressedScale = 0.88f, onClick = onClick)
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.16f))
-            .clickable(onClick = onClick),
+            .border(0.75.dp, Color.White.copy(alpha = 0.24f), CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = contentDescription, tint = Color.White, modifier = Modifier.size(19.dp))
@@ -2014,7 +2530,8 @@ private fun PlayerErrorCard(
         modifier = modifier
             .padding(20.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(Color.Black.copy(alpha = 0.85f))
+            .background(Color.Black.copy(alpha = 0.86f))
+            .border(0.85.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(14.dp))
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -2024,18 +2541,18 @@ private fun PlayerErrorCard(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(
                 modifier = Modifier
+                    .livelyPress(pressedScale = 0.92f, onClick = onRetry)
                     .clip(RoundedCornerShape(10.dp))
                     .background(Color.White.copy(alpha = 0.18f))
-                    .clickable(onClick = onRetry)
                     .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 Text("Retry", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             }
             Box(
                 modifier = Modifier
+                    .livelyPress(pressedScale = 0.92f, onClick = onOpenExternal)
                     .clip(RoundedCornerShape(10.dp))
                     .background(Color.White)
-                    .clickable(onClick = onOpenExternal)
                     .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 Text("External Player", color = Color.Black, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)

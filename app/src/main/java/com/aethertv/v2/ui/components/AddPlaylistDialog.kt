@@ -1,6 +1,7 @@
 package com.aethertv.v2.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.aethertv.v2.ui.theme.MatteGlassTokens
+import com.aethertv.v2.ui.theme.livelyPress
 
 @Composable
 fun AddPlaylistDialog(
@@ -41,7 +43,8 @@ fun AddPlaylistDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
-                .background(Color.White)
+                .background(MatteGlassTokens.SheetBg)
+                .border(1.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(24.dp))
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -64,7 +67,8 @@ fun AddPlaylistDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(MatteGlassTokens.CanvasWhite)
+                    .background(MatteGlassTokens.SubtleSurface)
+                    .border(0.75.dp, MatteGlassTokens.NeutralBorder, RoundedCornerShape(14.dp))
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -83,7 +87,7 @@ fun AddPlaylistDialog(
                             text = label,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (selected) Color.White else MatteGlassTokens.CharcoalMuted
+                            color = if (selected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalMuted
                         )
                     }
                 }
@@ -129,8 +133,8 @@ fun AddPlaylistDialog(
             ) {
                 Box(
                     modifier = Modifier
+                        .livelyPress(pressedScale = 0.94f, onClick = onDismiss)
                         .clip(RoundedCornerShape(12.dp))
-                        .clickable { onDismiss() }
                         .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
                     Text("Cancel", color = MatteGlassTokens.CharcoalMuted, fontWeight = FontWeight.Medium)
@@ -138,9 +142,7 @@ fun AddPlaylistDialog(
                 Spacer(Modifier.width(8.dp))
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MatteGlassTokens.CharcoalPrimary)
-                        .clickable {
+                        .livelyPress(pressedScale = 0.94f) {
                             val resolvedName = serverName.trim().ifEmpty {
                                 if (mode == 0) host.trim().removePrefix("http://").removePrefix("https://").substringBefore("/")
                                 else "M3U Playlist"
@@ -152,9 +154,11 @@ fun AddPlaylistDialog(
                                 onLoadM3u(resolvedName, m3uUrl)
                             }
                         }
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MatteGlassTokens.CharcoalPrimary)
                         .padding(horizontal = 18.dp, vertical = 10.dp)
                 ) {
-                    Text("Save & Load", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text("Save & Load", color = MatteGlassTokens.CanvasWhite, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

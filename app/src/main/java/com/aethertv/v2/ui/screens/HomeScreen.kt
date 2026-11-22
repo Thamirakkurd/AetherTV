@@ -1,9 +1,7 @@
 package com.aethertv.v2.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -14,7 +12,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -34,7 +33,10 @@ import com.aethertv.v2.data.ContentType
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.components.PosterMediaCard
 import com.aethertv.v2.ui.components.SimpleScreenHeader
+import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
+import com.aethertv.v2.ui.theme.livelyPress
+import dev.chrisbanes.haze.hazeSource
 
 @Composable
 fun HomeScreen(
@@ -51,78 +53,69 @@ fun HomeScreen(
     onAddPlaylistClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val hazeState = LocalHazeState.current
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MatteGlassTokens.CanvasWhite)
-    ) {
-        SimpleScreenHeader(
-            title = "Home",
-            onAddClick = onAddPlaylistClick
-        )
-
+    Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 12.dp, bottom = navInset + 84.dp + extraBottomPadding),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (hazeState != null) Modifier.hazeSource(hazeState) else Modifier)
+                .background(MatteGlassTokens.AmbientCanvasBrush),
+            contentPadding = PaddingValues(
+                top = topInset + 68.dp,
+                bottom = navInset + 86.dp + extraBottomPadding
+            ),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             if (!hasPlaylist) {
                 item(key = "welcome_card") {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MatteGlassTokens.HeaderPillBg,
-                        border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-                        shadowElevation = 0.dp,
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MatteGlassTokens.CardGlassBg)
+                            .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
+                            .padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        Text(
+                            text = "Welcome to AetherTV",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MatteGlassTokens.CharcoalPrimary
+                        )
+                        Text(
+                            text = "Add an Xtream Codes or M3U playlist to start streaming live TV, movies, and series.",
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp,
+                            color = MatteGlassTokens.CharcoalMuted
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Row(
+                            modifier = Modifier
+                                .livelyPress(pressedScale = 0.94f, onClick = onAddPlaylistClick)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MatteGlassTokens.CharcoalPrimary)
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Welcome to AetherTV",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MatteGlassTokens.CharcoalPrimary
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = MatteGlassTokens.CanvasWhite,
+                                modifier = Modifier.size(18.dp)
                             )
+                            Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "Add an Xtream Codes or M3U playlist to start streaming live TV, movies, and series.",
+                                text = "Add Server",
                                 fontSize = 13.sp,
-                                lineHeight = 19.sp,
-                                color = MatteGlassTokens.CharcoalMuted
+                                fontWeight = FontWeight.SemiBold,
+                                color = MatteGlassTokens.CanvasWhite
                             )
-                            Spacer(Modifier.height(2.dp))
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MatteGlassTokens.CharcoalPrimary,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onAddPlaylistClick() }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = null,
-                                        tint = MatteGlassTokens.CanvasWhite,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = "Add Server",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MatteGlassTokens.CanvasWhite
-                                    )
-                                }
-                            }
                         }
                     }
                 }
@@ -140,20 +133,19 @@ fun HomeScreen(
                     )
 
                     if (favoriteMedia.isEmpty()) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MatteGlassTokens.SubtleSurface,
-                            border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-                            shadowElevation = 0.dp,
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MatteGlassTokens.CardGlassBg)
+                                .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
+                                .padding(16.dp)
                         ) {
                             Text(
                                 text = "Tap ★ on any movie or series to pin it to your Home shelf.",
                                 fontSize = 13.sp,
-                                color = MatteGlassTokens.CharcoalMuted,
-                                modifier = Modifier.padding(16.dp)
+                                color = MatteGlassTokens.CharcoalMuted
                             )
                         }
                     } else {
@@ -228,7 +220,7 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             items(recentlyWatched, key = { "recent_${it.id}" }, contentType = { "recent_card" }) { item ->
-                                val thumbShape = RoundedCornerShape(6.dp)
+                                val thumbShape = RoundedCornerShape(10.dp)
                                 val thumbReq = remember(item.posterUrl) {
                                     item.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
                                         ImageRequest.Builder(context)
@@ -241,8 +233,7 @@ fun HomeScreen(
                                 Column(
                                     modifier = Modifier
                                         .width(126.dp)
-                                        .clip(thumbShape)
-                                        .clickable {
+                                        .livelyPress(pressedScale = 0.955f, depthShiftPx = 3f) {
                                             if (item.contentType == ContentType.LIVE) onPlayClick(item)
                                             else onItemClick(item)
                                         }
@@ -252,8 +243,8 @@ fun HomeScreen(
                                             .fillMaxWidth()
                                             .height(172.dp)
                                             .clip(thumbShape)
-                                            .background(Color(0xFF27272A))
-                                            .border(BorderStroke(1.dp, MatteGlassTokens.NeutralBorder), thumbShape)
+                                            .background(Color(0xFF1F2430))
+                                            .border(0.9.dp, MatteGlassTokens.CardRimBrush, thumbShape)
                                     ) {
                                         if (thumbReq != null) {
                                             AsyncImage(
@@ -281,5 +272,11 @@ fun HomeScreen(
                 }
             }
         }
+
+        SimpleScreenHeader(
+            title = "Home",
+            onAddClick = onAddPlaylistClick,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 }
