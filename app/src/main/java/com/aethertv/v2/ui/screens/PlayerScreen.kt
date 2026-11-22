@@ -685,7 +685,7 @@ fun UnifiedMorphPlayerOverlay(
         val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         val animatedMiniBottom by animateDpAsState(
-            targetValue = if (barsVisible) navBottom + 64.dp else navBottom + 10.dp,
+            targetValue = if (barsVisible) navBottom + 78.dp else navBottom + 10.dp,
             animationSpec = tween(220, easing = FastOutSlowInEasing),
             label = "miniDockBottom"
         )

@@ -33,6 +33,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -77,30 +78,36 @@ fun FloatingGlassNavBar(
     modifier: Modifier = Modifier
 ) {
     val hazeState = LocalHazeState.current
+    val capsuleShape = RoundedCornerShape(30.dp)
+    val activePillShape = RoundedCornerShape(22.dp)
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .liquidGlassSurface(
-                hazeState = hazeState,
-                shape = RectangleShape,
-                tintColor = MatteGlassTokens.NavGlassBg,
-                fallbackColor = MatteGlassTokens.NavGlassFallback,
-                blurRadius = 28.dp,
-                borderWidth = 0.dp,
-                borderBrush = null
-            )
+            .navigationBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
     ) {
-        HorizontalDivider(
-            thickness = 0.75.dp,
-            color = if (MatteGlassTokens.isDark) Color.White.copy(alpha = 0.16f) else MatteGlassTokens.HairlineDivider
-        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .height(58.dp)
-                .padding(horizontal = 6.dp),
+                .height(60.dp)
+                .shadow(
+                    elevation = if (MatteGlassTokens.isDark) 14.dp else 10.dp,
+                    shape = capsuleShape,
+                    ambientColor = Color.Black.copy(alpha = 0.28f),
+                    spotColor = Color.Black.copy(alpha = 0.24f)
+                )
+                .liquidGlassSurface(
+                    hazeState = hazeState,
+                    shape = capsuleShape,
+                    tintColor = MatteGlassTokens.NavGlassBg,
+                    fallbackColor = MatteGlassTokens.NavGlassFallback,
+                    blurRadius = 28.dp,
+                    borderWidth = 0.9.dp,
+                    borderBrush = MatteGlassTokens.SpecularBorderBrush
+                )
+                .padding(horizontal = 6.dp, vertical = 5.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -111,8 +118,13 @@ fun FloatingGlassNavBar(
                     animationSpec = tween(180),
                     label = "navTint"
                 )
+                val pillBg by animateColorAsState(
+                    targetValue = if (selected) MatteGlassTokens.ActivePillBg else Color.Transparent,
+                    animationSpec = tween(180),
+                    label = "navPillBg"
+                )
                 val iconScale by animateFloatAsState(
-                    targetValue = if (selected) 1.08f else 0.96f,
+                    targetValue = if (selected) 1.07f else 0.96f,
                     animationSpec = spring(dampingRatio = 0.58f, stiffness = 500f),
                     label = "navScale"
                 )
@@ -121,8 +133,15 @@ fun FloatingGlassNavBar(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .livelyPress(pressedScale = 0.92f, depthShiftPx = 2f) { onSelect(index) }
-                        .padding(vertical = 4.dp),
+                        .livelyPress(pressedScale = 0.92f, depthShiftPx = 1.5f) { onSelect(index) }
+                        .clip(activePillShape)
+                        .background(pillBg)
+                        .then(
+                            if (selected) {
+                                Modifier.border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, activePillShape)
+                            } else Modifier
+                        )
+                        .padding(vertical = 3.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -131,13 +150,13 @@ fun FloatingGlassNavBar(
                         contentDescription = item.label,
                         tint = tint,
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(21.dp)
                             .graphicsLayer {
                                 scaleX = iconScale
                                 scaleY = iconScale
                             }
                     )
-                    Spacer(Modifier.height(2.dp))
+                    Spacer(Modifier.height(1.dp))
                     Text(
                         text = item.label,
                         fontSize = 10.sp,
@@ -503,6 +522,10 @@ fun PosterMediaCard(
         }
     }
 
+    val frameShape = RoundedCornerShape(6.dp)
+    val frameBg = if (MatteGlassTokens.isDark) Color(0x52182030) else Color(0xB8FFFFFF)
+    val frameBorder = if (MatteGlassTokens.isDark) Color.White.copy(alpha = 0.24f) else Color(0x3814161A)
+
     Box(
         modifier = modifier
             .graphicsLayer {
@@ -510,14 +533,22 @@ fun PosterMediaCard(
                 scaleY = scale
                 translationY = depthY
             }
-            .clip(CardShape)
-            .background(CardBgBrush)
+            .clip(frameShape)
+            .background(frameBg)
+            .border(0.85.dp, frameBorder, frameShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onCardClick
             )
+            .padding(2.dp)
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CardShape)
+                .background(CardBgBrush)
+        ) {
         if (imageRequest != null) {
             AsyncImage(
                 model = imageRequest,

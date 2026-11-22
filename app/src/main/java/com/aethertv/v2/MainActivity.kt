@@ -186,9 +186,9 @@ private fun AetherV2App(
     val tabs = remember {
         listOf(
             NavTabItem("Home", Icons.Filled.Home, Icons.Outlined.Home),
-            NavTabItem("Live", Icons.Filled.LiveTv, Icons.Outlined.LiveTv),
             NavTabItem("Movies", Icons.Filled.Movie, Icons.Outlined.Movie),
             NavTabItem("Series", Icons.Filled.Tv, Icons.Outlined.Tv),
+            NavTabItem("Live", Icons.Filled.LiveTv, Icons.Outlined.LiveTv),
             NavTabItem("Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
         )
     }
@@ -944,9 +944,9 @@ private fun AetherV2App(
         searchQuery = ""
         barsVisible = true
         when (selectedTab) {
-            1 -> ensureLiveCategories(forceNetwork = false)
-            2 -> ensureVodCategories(forceNetwork = false)
-            3 -> ensureSeriesCategories(forceNetwork = false)
+            1 -> ensureVodCategories(forceNetwork = false)
+            2 -> ensureSeriesCategories(forceNetwork = false)
+            3 -> ensureLiveCategories(forceNetwork = false)
             4 -> downloadedFiles = MediaDownloadHelper.listDownloadedFiles()
         }
     }
@@ -1015,28 +1015,6 @@ private fun AetherV2App(
                         )
                     }
                     1 -> {
-                        LiveTvScreen(
-                            items = shownLive,
-                            categories = liveCatNames,
-                            selectedCategory = selectedLiveCat,
-                            favoriteIds = favoriteIds,
-                            isLoading = isLoading,
-                            listState = liveListState,
-                            topBarVisible = barsVisible,
-                            extraBottomPadding = miniPlayerExtraPadding,
-                            emptyMessage = if (playlistMode.isBlank()) "Add a server from Home or Settings to watch Live TV" else "No live channels in this category",
-                            searchQuery = searchQuery,
-                            onSearchQueryChange = { searchQuery = it },
-                            onSelectCategory = { cat ->
-                                if (cat == "All") confirmAllTab = 1
-                                else loadLiveCategory(cat, forceNetwork = false)
-                            },
-                            onPlayClick = { playItem(it) },
-                            onFavoriteClick = { toggleFavorite(it) },
-                            onMoreClick = { cardMenuTarget = it }
-                        )
-                    }
-                    2 -> {
                         MediaGridScreen(
                             items = shownVod,
                             categories = vodCatNames,
@@ -1051,7 +1029,7 @@ private fun AetherV2App(
                             searchPlaceholder = "Search movies...",
                             onSearchQueryChange = { searchQuery = it },
                             onSelectCategory = { cat ->
-                                if (cat == "All") confirmAllTab = 2
+                                if (cat == "All") confirmAllTab = 1
                                 else loadVodCategory(cat, forceNetwork = false)
                             },
                             onItemClick = { openDetail(it) },
@@ -1060,7 +1038,7 @@ private fun AetherV2App(
                             onMoreClick = { cardMenuTarget = it }
                         )
                     }
-                    3 -> {
+                    2 -> {
                         MediaGridScreen(
                             items = shownSeries,
                             categories = seriesCatNames,
@@ -1075,12 +1053,34 @@ private fun AetherV2App(
                             searchPlaceholder = "Search series...",
                             onSearchQueryChange = { searchQuery = it },
                             onSelectCategory = { cat ->
-                                if (cat == "All") confirmAllTab = 3
+                                if (cat == "All") confirmAllTab = 2
                                 else loadSeriesCategory(cat, forceNetwork = false)
                             },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
                             onPlayClick = { openDetail(it) },
+                            onMoreClick = { cardMenuTarget = it }
+                        )
+                    }
+                    3 -> {
+                        LiveTvScreen(
+                            items = shownLive,
+                            categories = liveCatNames,
+                            selectedCategory = selectedLiveCat,
+                            favoriteIds = favoriteIds,
+                            isLoading = isLoading,
+                            listState = liveListState,
+                            topBarVisible = barsVisible,
+                            extraBottomPadding = miniPlayerExtraPadding,
+                            emptyMessage = if (playlistMode.isBlank()) "Add a server from Home or Settings to watch Live TV" else "No live channels in this category",
+                            searchQuery = searchQuery,
+                            onSearchQueryChange = { searchQuery = it },
+                            onSelectCategory = { cat ->
+                                if (cat == "All") confirmAllTab = 3
+                                else loadLiveCategory(cat, forceNetwork = false)
+                            },
+                            onPlayClick = { playItem(it) },
+                            onFavoriteClick = { toggleFavorite(it) },
                             onMoreClick = { cardMenuTarget = it }
                         )
                     }
@@ -1376,9 +1376,9 @@ private fun AetherV2App(
                         modifier = Modifier
                             .livelyPress(pressedScale = 0.94f) {
                                 confirmAllTab = null
-                                if (targetTab == 1) loadLiveCategory("All", forceNetwork = false)
-                                if (targetTab == 2) loadVodCategory("All", forceNetwork = false)
-                                if (targetTab == 3) loadSeriesCategory("All", forceNetwork = false)
+                                if (targetTab == 1) loadVodCategory("All", forceNetwork = false)
+                                if (targetTab == 2) loadSeriesCategory("All", forceNetwork = false)
+                                if (targetTab == 3) loadLiveCategory("All", forceNetwork = false)
                             }
                             .clip(RoundedCornerShape(12.dp))
                             .background(MatteGlassTokens.SubtleSurface)
@@ -1392,9 +1392,9 @@ private fun AetherV2App(
                         modifier = Modifier
                             .livelyPress(pressedScale = 0.94f) {
                                 confirmAllTab = null
-                                if (targetTab == 1) loadLiveCategory("All", forceNetwork = true)
-                                if (targetTab == 2) loadVodCategory("All", forceNetwork = true)
-                                if (targetTab == 3) loadSeriesCategory("All", forceNetwork = true)
+                                if (targetTab == 1) loadVodCategory("All", forceNetwork = true)
+                                if (targetTab == 2) loadSeriesCategory("All", forceNetwork = true)
+                                if (targetTab == 3) loadLiveCategory("All", forceNetwork = true)
                             }
                             .clip(RoundedCornerShape(12.dp))
                             .background(MatteGlassTokens.CharcoalPrimary)
