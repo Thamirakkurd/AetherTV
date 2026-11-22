@@ -1,33 +1,54 @@
 package com.aethertv.v2
 
+import android.content.Context
+import android.content.Intent
 import android.graphics.Color as AndroidColor
+import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.aethertv.v2.data.CategoryItem
+import com.aethertv.v2.data.ContentType
+import com.aethertv.v2.data.EpisodeItem
+import com.aethertv.v2.data.MediaItem
+import com.aethertv.v2.data.XtreamClient
+import com.aethertv.v2.ui.components.AddPlaylistDialog
 import com.aethertv.v2.ui.components.FloatingGlassNavBar
-import com.aethertv.v2.ui.components.GlassMediaCard
+import com.aethertv.v2.ui.components.GlassSearchStrip
 import com.aethertv.v2.ui.components.GlassTopHeader
 import com.aethertv.v2.ui.components.NavTabItem
 import com.aethertv.v2.ui.screens.HomeScreen
+import com.aethertv.v2.ui.screens.MediaGridScreen
+import com.aethertv.v2.ui.screens.SettingsScreen
 import com.aethertv.v2.ui.theme.MatteGlassTheme
 import com.aethertv.v2.ui.theme.MatteGlassTokens
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,14 +59,31 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             MatteGlassTheme {
-                AetherV2Shell()
+                AetherV2App()
             }
         }
     }
 }
 
+private fun launchExternalPlayer(context: Context, url: String, title: String) {
+    try {
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(Uri.parse(url), "video/*")
+            putExtra("title", title)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(Intent.createChooser(intent, "Play $title"))
+    } catch (_: Exception) {
+        Toast.makeText(context, "No video player found", Toast.LENGTH_SHORT).show()
+    }
+}
+
 @Composable
-private fun AetherV2Shell() {
+private fun AetherV2App() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val prefs = remember { context.getSharedPreferences("aethertv_v2_prefs", Context.MODE_PRIVATE) }
+
     val tabs = remember {
         listOf(
             NavTabItem("Home", Icons.Default.Home),
@@ -55,11 +93,274 @@ private fun AetherV2Shell() {
             NavTabItem("Settings", Icons.Default.Settings)
         )
     }
-    var selectedTab by remember { mutableIntStateOf(0) }
 
-    val demoItems = remember(selectedTab) {
-        val prefix = tabs[selectedTab].label
-        (1..12).map { index -> "$prefix $index" }
+    var selectedTab by remember { mutableIntStateOf(0) }
+    var showSearch by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+
+    var playlistMode by remember { mutableStateOf(prefs.getString("mode", "") ?: "") }
+    var xtreamHost by remember { mutableStateOf(prefs.getString("host", "") ?: "") }
+    var xtreamUser by remember { mutableStateOf(prefs.getString("user", "") ?: "") }
+    var xtreamPass by remember { mutableStateOf(prefs.getString("pass", "") ?: "") }
+    var m3uUrl by remember { mutableStateOf(prefs.getString("m3u_url", "") ?: "") }
+
+    // Catalog state (lazy-loaded per category for large Xtream playlists)
+    var liveCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
+    var selectedLiveCat by remember { mutableStateOf("") }
+    var liveItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var m3uAllItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+
+    var vodCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
+    var selectedVodCat by remember { mutableStateOf("") }
+    var vodItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+
+    var seriesCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
+    var selectedSeriesCat by remember { mutableStateOf("") }
+    var seriesItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+
+    // Persisted Favorites & Recents
+    var favorites by remember { mutableStateOf(XtreamClient.decodeItems(prefs.getString("favorites_json", null))) }
+    var recents by remember { mutableStateOf(XtreamClient.decodeItems(prefs.getString("recents_json", null))) }
+    val favoriteIds = remember(favorites) { favorites.map { it.id }.toSet() }
+
+    // Series episodes modal state
+    var activeSeriesTitle by remember { mutableStateOf<String?>(null) }
+    var activeEpisodes by remember { mutableStateOf<List<EpisodeItem>>(emptyList()) }
+    var loadingEpisodes by remember { mutableStateOf(false) }
+
+    fun toggleFavorite(item: MediaItem) {
+        val updated = if (favorites.any { it.id == item.id }) {
+            favorites.filterNot { it.id == item.id }
+        } else {
+            listOf(item) + favorites
+        }
+        favorites = updated
+        prefs.edit().putString("favorites_json", XtreamClient.encodeItems(updated)).apply()
+    }
+
+    fun recordRecent(item: MediaItem) {
+        val updated = (listOf(item) + recents.filterNot { it.id == item.id }).take(20)
+        recents = updated
+        prefs.edit().putString("recents_json", XtreamClient.encodeItems(updated)).apply()
+    }
+
+    fun playItem(item: MediaItem) {
+        recordRecent(item)
+        launchExternalPlayer(context, item.streamUrl, item.name)
+    }
+
+    fun openSeries(series: MediaItem) {
+        val sid = series.seriesId ?: return
+        if (xtreamHost.isBlank() || xtreamUser.isBlank() || xtreamPass.isBlank()) return
+        activeSeriesTitle = series.name
+        activeEpisodes = emptyList()
+        loadingEpisodes = true
+        scope.launch {
+            try {
+                val json = XtreamClient.fetchText(
+                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_series_info&series_id=$sid"
+                )
+                activeEpisodes = withContext(Dispatchers.Default) {
+                    XtreamClient.parseSeriesEpisodes(json, xtreamHost, xtreamUser, xtreamPass)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Episodes error: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
+                loadingEpisodes = false
+            }
+        }
+    }
+
+    fun loadLiveCategory(catName: String) {
+        selectedLiveCat = catName
+        if (catName == "Favorites") return
+        if (playlistMode == "m3u") {
+            liveItems = if (catName == "All") m3uAllItems else m3uAllItems.filter { it.group == catName }
+            return
+        }
+        val cat = liveCategories.firstOrNull { it.name == catName } ?: return
+        scope.launch {
+            isLoading = true
+            statusMessage = "Loading $catName..."
+            try {
+                val json = XtreamClient.fetchText(
+                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_live_streams&category_id=${cat.id}"
+                )
+                liveItems = withContext(Dispatchers.Default) {
+                    XtreamClient.parseLiveStreams(json, xtreamHost, xtreamUser, xtreamPass, cat.name)
+                }
+                statusMessage = null
+            } catch (e: Exception) {
+                statusMessage = "Live error: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun loadVodCategory(catName: String) {
+        selectedVodCat = catName
+        if (catName == "Favorites") return
+        val cat = vodCategories.firstOrNull { it.name == catName } ?: return
+        scope.launch {
+            isLoading = true
+            statusMessage = "Loading $catName..."
+            try {
+                val json = XtreamClient.fetchText(
+                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_vod_streams&category_id=${cat.id}"
+                )
+                vodItems = withContext(Dispatchers.Default) {
+                    XtreamClient.parseVodStreams(json, xtreamHost, xtreamUser, xtreamPass, cat.name)
+                }
+                statusMessage = null
+            } catch (e: Exception) {
+                statusMessage = "Movies error: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun loadSeriesCategory(catName: String) {
+        selectedSeriesCat = catName
+        if (catName == "Favorites") return
+        val cat = seriesCategories.firstOrNull { it.name == catName } ?: return
+        scope.launch {
+            isLoading = true
+            statusMessage = "Loading $catName..."
+            try {
+                val json = XtreamClient.fetchText(
+                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_series&category_id=${cat.id}"
+                )
+                seriesItems = withContext(Dispatchers.Default) {
+                    XtreamClient.parseSeries(json, cat.name)
+                }
+                statusMessage = null
+            } catch (e: Exception) {
+                statusMessage = "Series error: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun ensureLiveCategories() {
+        if (playlistMode != "xtream" || liveCategories.isNotEmpty()) return
+        scope.launch {
+            isLoading = true
+            statusMessage = "Loading live categories..."
+            try {
+                val json = XtreamClient.fetchText(
+                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_live_categories"
+                )
+                val cats = withContext(Dispatchers.Default) { XtreamClient.parseCategories(json) }
+                liveCategories = cats
+                cats.firstOrNull()?.let { loadLiveCategory(it.name) }
+            } catch (e: Exception) {
+                statusMessage = "Live error: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun ensureVodCategories() {
+        if (playlistMode != "xtream" || vodCategories.isNotEmpty()) return
+        scope.launch {
+            isLoading = true
+            statusMessage = "Loading movie categories..."
+            try {
+                val json = XtreamClient.fetchText(
+                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_vod_categories"
+                )
+                val cats = withContext(Dispatchers.Default) { XtreamClient.parseCategories(json) }
+                vodCategories = cats
+                cats.firstOrNull()?.let { loadVodCategory(it.name) }
+            } catch (e: Exception) {
+                statusMessage = "Movies error: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun ensureSeriesCategories() {
+        if (playlistMode != "xtream" || seriesCategories.isNotEmpty()) return
+        scope.launch {
+            isLoading = true
+            statusMessage = "Loading series categories..."
+            try {
+                val json = XtreamClient.fetchText(
+                    "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_series_categories"
+                )
+                val cats = withContext(Dispatchers.Default) { XtreamClient.parseCategories(json) }
+                seriesCategories = cats
+                cats.firstOrNull()?.let { loadSeriesCategory(it.name) }
+            } catch (e: Exception) {
+                statusMessage = "Series error: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun connectXtream(rawHost: String, rawUser: String, rawPass: String) {
+        val base = XtreamClient.normalizeHost(rawHost)
+        val u = rawUser.trim()
+        val p = rawPass.trim()
+        playlistMode = "xtream"
+        xtreamHost = base
+        xtreamUser = u
+        xtreamPass = p
+        liveCategories = emptyList()
+        vodCategories = emptyList()
+        seriesCategories = emptyList()
+        liveItems = emptyList()
+        vodItems = emptyList()
+        seriesItems = emptyList()
+        prefs.edit()
+            .putString("mode", "xtream")
+            .putString("host", base)
+            .putString("user", u)
+            .putString("pass", p)
+            .apply()
+        ensureLiveCategories()
+    }
+
+    fun connectM3u(url: String) {
+        val cleanUrl = url.trim()
+        playlistMode = "m3u"
+        m3uUrl = cleanUrl
+        prefs.edit().putString("mode", "m3u").putString("m3u_url", cleanUrl).apply()
+        scope.launch {
+            isLoading = true
+            statusMessage = "Loading M3U playlist..."
+            try {
+                val body = XtreamClient.fetchText(cleanUrl)
+                val parsed = withContext(Dispatchers.Default) { XtreamClient.parseM3u(body) }
+                m3uAllItems = parsed
+                val groups = parsed.map { it.group }.distinct().sorted()
+                liveCategories = groups.map { CategoryItem(it, it) }
+                selectedLiveCat = "All"
+                liveItems = parsed
+                statusMessage = null
+            } catch (e: Exception) {
+                statusMessage = "M3U error: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (playlistMode == "xtream" && xtreamHost.isNotBlank() && xtreamUser.isNotBlank() && xtreamPass.isNotBlank()) {
+            ensureLiveCategories()
+        } else if (playlistMode == "m3u" && m3uUrl.isNotBlank()) {
+            connectM3u(m3uUrl)
+        }
     }
 
     Box(
@@ -70,31 +371,163 @@ private fun AetherV2Shell() {
         Column(modifier = Modifier.fillMaxSize()) {
             GlassTopHeader(
                 title = tabs[selectedTab].label,
-                onSearchClick = {},
-                onFilterClick = {},
-                onAddClick = {}
+                onSearchClick = { showSearch = !showSearch },
+                onFilterClick = {
+                    if (selectedTab == 1) ensureLiveCategories()
+                    if (selectedTab == 2) ensureVodCategories()
+                    if (selectedTab == 3) ensureSeriesCategories()
+                },
+                onAddClick = { showAddDialog = true }
             )
 
-            if (selectedTab == 0) {
-                HomeScreen()
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 104.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    itemsIndexed(demoItems) { idx, title ->
-                        GlassMediaCard(
-                            title = title,
-                            subtitle = if (selectedTab == 1) "HD Stream • Sports & Entertainment" else "2026 • Action / Drama",
-                            badgeText = if (selectedTab == 1) "LIVE" else "4K UHD",
-                            showLiveDot = selectedTab == 1,
-                            toneIndex = idx,
-                            onClick = {}
-                        )
+            if (showSearch && selectedTab in 1..3) {
+                GlassSearchStrip(
+                    query = searchQuery,
+                    placeholder = "Search ${tabs[selectedTab].label.lowercase()}...",
+                    onQueryChange = { searchQuery = it },
+                    onClose = {
+                        searchQuery = ""
+                        showSearch = false
                     }
+                )
+            }
+
+            statusMessage?.let { msg ->
+                Text(
+                    text = msg,
+                    fontSize = 12.sp,
+                    color = if (msg.contains("error", ignoreCase = true)) MatteGlassTokens.NotificationDot else MatteGlassTokens.CharcoalMuted,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp)
+                )
+            }
+
+            when (selectedTab) {
+                0 -> {
+                    val movieAndSeriesFavs = remember(favorites) {
+                        favorites.filter { it.contentType == ContentType.MOVIE || it.contentType == ContentType.SERIES }
+                    }
+                    HomeScreen(
+                        favoriteMedia = movieAndSeriesFavs,
+                        recentlyWatched = recents,
+                        favoriteIds = favoriteIds,
+                        hasPlaylist = playlistMode.isNotBlank(),
+                        onItemClick = { item ->
+                            if (item.contentType == ContentType.SERIES) openSeries(item) else playItem(item)
+                        },
+                        onFavoriteClick = { toggleFavorite(it) },
+                        onAddPlaylistClick = { showAddDialog = true }
+                    )
+                }
+                1 -> {
+                    val catNames = remember(liveCategories, playlistMode) {
+                        val base = liveCategories.map { it.name }
+                        if (playlistMode == "m3u") listOf("All", "Favorites") + base
+                        else listOf("Favorites") + base
+                    }
+                    val shown = remember(liveItems, selectedLiveCat, searchQuery, favorites) {
+                        val source = if (selectedLiveCat == "Favorites") {
+                            favorites.filter { it.contentType == ContentType.LIVE }
+                        } else {
+                            liveItems
+                        }
+                        if (searchQuery.isBlank()) source
+                        else source.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                    }
+                    MediaGridScreen(
+                        items = shown,
+                        categories = catNames,
+                        selectedCategory = selectedLiveCat,
+                        favoriteIds = favoriteIds,
+                        isLoading = isLoading,
+                        emptyMessage = if (playlistMode.isBlank()) "Tap + to add your playlist" else "No live channels in this category",
+                        onSelectCategory = { loadLiveCategory(it) },
+                        onItemClick = { playItem(it) },
+                        onFavoriteClick = { toggleFavorite(it) }
+                    )
+                }
+                2 -> {
+                    val catNames = remember(vodCategories) { listOf("Favorites") + vodCategories.map { it.name } }
+                    val shown = remember(vodItems, selectedVodCat, searchQuery, favorites) {
+                        val source = if (selectedVodCat == "Favorites") {
+                            favorites.filter { it.contentType == ContentType.MOVIE }
+                        } else {
+                            vodItems
+                        }
+                        if (searchQuery.isBlank()) source
+                        else source.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                    }
+                    MediaGridScreen(
+                        items = shown,
+                        categories = catNames,
+                        selectedCategory = selectedVodCat,
+                        favoriteIds = favoriteIds,
+                        isLoading = isLoading,
+                        emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes playlist for Movies" else "No movies in this category",
+                        onSelectCategory = { loadVodCategory(it) },
+                        onItemClick = { playItem(it) },
+                        onFavoriteClick = { toggleFavorite(it) }
+                    )
+                }
+                3 -> {
+                    val catNames = remember(seriesCategories) { listOf("Favorites") + seriesCategories.map { it.name } }
+                    val shown = remember(seriesItems, selectedSeriesCat, searchQuery, favorites) {
+                        val source = if (selectedSeriesCat == "Favorites") {
+                            favorites.filter { it.contentType == ContentType.SERIES }
+                        } else {
+                            seriesItems
+                        }
+                        if (searchQuery.isBlank()) source
+                        else source.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                    }
+                    MediaGridScreen(
+                        items = shown,
+                        categories = catNames,
+                        selectedCategory = selectedSeriesCat,
+                        favoriteIds = favoriteIds,
+                        isLoading = isLoading,
+                        emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes playlist for Series" else "No series in this category",
+                        onSelectCategory = { loadSeriesCategory(it) },
+                        onItemClick = { openSeries(it) },
+                        onFavoriteClick = { toggleFavorite(it) }
+                    )
+                }
+                4 -> {
+                    val label = when (playlistMode) {
+                        "xtream" -> xtreamHost
+                        "m3u" -> m3uUrl
+                        else -> "No playlist configured"
+                    }
+                    SettingsScreen(
+                        playlistLabel = label,
+                        favoritesCount = favorites.size,
+                        recentCount = recents.size,
+                        onRefreshPlaylist = {
+                            if (playlistMode == "xtream" && xtreamHost.isNotBlank()) {
+                                connectXtream(xtreamHost, xtreamUser, xtreamPass)
+                            } else if (playlistMode == "m3u" && m3uUrl.isNotBlank()) {
+                                connectM3u(m3uUrl)
+                            }
+                        },
+                        onAddOrChangePlaylist = { showAddDialog = true },
+                        onClearAll = {
+                            prefs.edit().clear().apply()
+                            playlistMode = ""
+                            xtreamHost = ""
+                            xtreamUser = ""
+                            xtreamPass = ""
+                            m3uUrl = ""
+                            liveCategories = emptyList()
+                            vodCategories = emptyList()
+                            seriesCategories = emptyList()
+                            liveItems = emptyList()
+                            vodItems = emptyList()
+                            seriesItems = emptyList()
+                            m3uAllItems = emptyList()
+                            favorites = emptyList()
+                            recents = emptyList()
+                            statusMessage = "Cleared all saved data"
+                        }
+                    )
                 }
             }
         }
@@ -102,8 +535,108 @@ private fun AetherV2Shell() {
         FloatingGlassNavBar(
             items = tabs,
             selectedIndex = selectedTab,
-            onSelect = { selectedTab = it },
+            onSelect = { idx ->
+                selectedTab = idx
+                searchQuery = ""
+                if (idx == 1) ensureLiveCategories()
+                if (idx == 2) ensureVodCategories()
+                if (idx == 3) ensureSeriesCategories()
+            },
             modifier = Modifier.align(Alignment.BottomCenter)
+        )
+    }
+
+    if (showAddDialog) {
+        AddPlaylistDialog(
+            initialHost = xtreamHost,
+            initialUser = xtreamUser,
+            initialPass = xtreamPass,
+            initialM3u = m3uUrl,
+            onDismiss = { showAddDialog = false },
+            onLoadXtream = { h, u, p ->
+                showAddDialog = false
+                connectXtream(h, u, p)
+            },
+            onLoadM3u = { url ->
+                showAddDialog = false
+                connectM3u(url)
+            }
+        )
+    }
+
+    activeSeriesTitle?.let { seriesTitle ->
+        AlertDialog(
+            onDismissRequest = { activeSeriesTitle = null },
+            containerColor = MatteGlassTokens.CanvasWhite,
+            title = {
+                Text(
+                    text = seriesTitle,
+                    fontWeight = FontWeight.Bold,
+                    color = MatteGlassTokens.CharcoalPrimary
+                )
+            },
+            text = {
+                if (loadingEpisodes) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = MatteGlassTokens.CharcoalPrimary)
+                    }
+                } else if (activeEpisodes.isEmpty()) {
+                    Text("No episodes found.", color = MatteGlassTokens.CharcoalMuted)
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(activeEpisodes, key = { it.id }) { ep ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MatteGlassTokens.HeaderPillBg,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        activeSeriesTitle = null
+                                        val epMedia = MediaItem(
+                                            id = "ep_${ep.id}",
+                                            name = "$seriesTitle • ${ep.title}",
+                                            group = ep.season,
+                                            posterUrl = null,
+                                            streamUrl = ep.streamUrl,
+                                            contentType = ContentType.MOVIE,
+                                            badge = ep.season
+                                        )
+                                        playItem(epMedia)
+                                    }
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = ep.title,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MatteGlassTokens.CharcoalPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = ep.season,
+                                        fontSize = 12.sp,
+                                        color = MatteGlassTokens.CharcoalMuted
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { activeSeriesTitle = null }) {
+                    Text("Close", color = MatteGlassTokens.CharcoalPrimary)
+                }
+            }
         )
     }
 }

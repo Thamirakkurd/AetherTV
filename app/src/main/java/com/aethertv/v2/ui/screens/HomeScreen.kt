@@ -1,5 +1,6 @@
 package com.aethertv.v2.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,7 +11,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -18,40 +22,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.aethertv.v2.data.ContentType
+import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.components.GlassMediaCard
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 
-data class HomePreviewItem(
-    val kicker: String,
-    val title: String,
-    val subtitle: String,
-    val badge: String
-)
-
 @Composable
 fun HomeScreen(
-    onItemClick: (HomePreviewItem) -> Unit = {},
-    onRecentlyWatchedClick: () -> Unit = {}
+    favoriteMedia: List<MediaItem>,
+    recentlyWatched: List<MediaItem>,
+    favoriteIds: Set<String>,
+    hasPlaylist: Boolean,
+    onItemClick: (MediaItem) -> Unit,
+    onFavoriteClick: (MediaItem) -> Unit,
+    onAddPlaylistClick: () -> Unit
 ) {
-    val favoriteMedia = listOf(
-        HomePreviewItem("Movie • Sci-Fi", "Interstellar", "2014 • 4K HDR", "MOVIE"),
-        HomePreviewItem("Series • Drama", "Shogun", "Season 1 • 10 Episodes", "SERIES"),
-        HomePreviewItem("Movie • Action", "Dune: Part Two", "2024 • 4K UHD", "MOVIE"),
-        HomePreviewItem("Series • Thriller", "Severance", "Season 2 • 10 Episodes", "SERIES")
-    )
-
-    val recentlyWatched = listOf(
-        HomePreviewItem("Live TV", "beIN Sports 1 HD", "Sports • Live", "LIVE"),
-        HomePreviewItem("Movie", "The Batman", "2022 • Action", "4K"),
-        HomePreviewItem("Series", "Arcane", "S2 E04", "HD"),
-        HomePreviewItem("Live TV", "Sky Sports Main", "Sports • Live", "LIVE"),
-        HomePreviewItem("Movie", "Blade Runner 2049", "2017 • Sci-Fi", "4K")
-    )
-
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -59,7 +50,48 @@ fun HomeScreen(
         contentPadding = PaddingValues(top = 8.dp, bottom = 112.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // Section 1: Movies & Series Favorites (Large horizontal hero cards)
+        if (!hasPlaylist) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MatteGlassTokens.HeaderPillBg,
+                    border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+                    shadowElevation = 0.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Connect your IPTV playlist",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MatteGlassTokens.CharcoalPrimary
+                        )
+                        Text(
+                            text = "Add your Xtream Codes login or M3U URL to load live channels, movies, and series.",
+                            fontSize = 13.sp,
+                            color = MatteGlassTokens.CharcoalMuted
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Button(
+                            onClick = onAddPlaylistClick,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MatteGlassTokens.CharcoalPrimary,
+                                contentColor = MatteGlassTokens.CanvasWhite
+                            )
+                        ) {
+                            Text("Add Playlist")
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 1: Movies & Series Favorites
         item {
             Column {
                 Text(
@@ -71,43 +103,65 @@ fun HomeScreen(
                 )
                 Spacer(Modifier.height(10.dp))
 
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    itemsIndexed(favoriteMedia) { idx, item ->
-                        Column(modifier = Modifier.width(230.dp)) {
-                            Text(
-                                text = item.kicker,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MatteGlassTokens.CharcoalMuted,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(bottom = 6.dp)
-                            )
-                            GlassMediaCard(
-                                title = item.title,
-                                subtitle = item.subtitle,
-                                badgeText = item.badge,
-                                showLiveDot = false,
-                                toneIndex = idx,
-                                onClick = { onItemClick(item) },
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                if (favoriteMedia.isEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MatteGlassTokens.HeaderPillBg,
+                        border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+                        shadowElevation = 0.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp)
+                    ) {
+                        Text(
+                            text = "Star any movie or series to pin it here.",
+                            fontSize = 13.sp,
+                            color = MatteGlassTokens.CharcoalMuted,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                } else {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        itemsIndexed(favoriteMedia, key = { _, item -> item.id }) { idx, item ->
+                            val typeLabel = if (item.contentType == ContentType.SERIES) "Series" else "Movie"
+                            Column(modifier = Modifier.width(230.dp)) {
+                                Text(
+                                    text = "$typeLabel • ${item.group}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MatteGlassTokens.CharcoalMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+                                GlassMediaCard(
+                                    title = item.name,
+                                    subtitle = item.group,
+                                    badgeText = item.badge,
+                                    showLiveDot = false,
+                                    toneIndex = idx,
+                                    imageUrl = item.posterUrl,
+                                    isFavorite = favoriteIds.contains(item.id),
+                                    onFavoriteClick = { onFavoriteClick(item) },
+                                    onClick = { onItemClick(item) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Section 2: Recently Watched > (Compact horizontal row)
+        // Section 2: Recently Watched >
         item {
             Column {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onRecentlyWatchedClick)
                         .padding(horizontal = 14.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -120,23 +174,42 @@ fun HomeScreen(
                     Spacer(Modifier.width(2.dp))
                     Icon(
                         imageVector = Icons.Default.ChevronRight,
-                        contentDescription = "See all recently watched",
+                        contentDescription = null,
                         tint = MatteGlassTokens.CharcoalMuted,
                         modifier = Modifier.size(22.dp)
                     )
                 }
                 Spacer(Modifier.height(10.dp))
 
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    itemsIndexed(recentlyWatched) { idx, item ->
-                        CompactRecentCard(
-                            item = item,
-                            toneIndex = idx,
-                            onClick = { onItemClick(item) }
+                if (recentlyWatched.isEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MatteGlassTokens.HeaderPillBg,
+                        border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+                        shadowElevation = 0.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp)
+                    ) {
+                        Text(
+                            text = "Channels, movies, and episodes you play will appear here.",
+                            fontSize = 13.sp,
+                            color = MatteGlassTokens.CharcoalMuted,
+                            modifier = Modifier.padding(16.dp)
                         )
+                    }
+                } else {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(recentlyWatched, key = { _, item -> item.id }) { idx, item ->
+                            CompactRecentCard(
+                                item = item,
+                                toneIndex = idx,
+                                onClick = { onItemClick(item) }
+                            )
+                        }
                     }
                 }
             }
@@ -146,7 +219,7 @@ fun HomeScreen(
 
 @Composable
 private fun CompactRecentCard(
-    item: HomePreviewItem,
+    item: MediaItem,
     toneIndex: Int,
     onClick: () -> Unit
 ) {
@@ -171,6 +244,14 @@ private fun CompactRecentCard(
                 .background(placeholderBrush)
                 .border(1.dp, MatteGlassTokens.NeutralBorder, shape)
         ) {
+            if (!item.posterUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = item.posterUrl,
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -180,7 +261,7 @@ private fun CompactRecentCard(
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            text = item.title,
+            text = item.name,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             color = MatteGlassTokens.CharcoalPrimary,
@@ -188,7 +269,7 @@ private fun CompactRecentCard(
             overflow = TextOverflow.Ellipsis
         )
         Text(
-            text = item.subtitle,
+            text = item.group,
             fontSize = 11.sp,
             color = MatteGlassTokens.CharcoalMuted,
             maxLines = 1,

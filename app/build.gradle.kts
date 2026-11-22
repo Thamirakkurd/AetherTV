@@ -12,8 +12,8 @@ android {
         applicationId = "com.aethertv.v2"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "2.0.0-m1"
+        versionCode = 2
+        versionName = "2.0.0-m2"
     }
 
     buildTypes {
@@ -45,4 +45,7 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("io.coil-kt:coil-compose:2.7.0")
 }
