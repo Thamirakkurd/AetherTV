@@ -34,6 +34,7 @@ import com.aethertv.v2.data.ContentType
 import com.aethertv.v2.data.EpisodeItem
 import com.aethertv.v2.data.MediaDetailInfo
 import com.aethertv.v2.data.MediaItem
+import com.aethertv.v2.data.PlaylistDiskCache
 import com.aethertv.v2.data.XtreamClient
 import com.aethertv.v2.ui.components.AddPlaylistDialog
 import com.aethertv.v2.ui.components.FloatingGlassNavBar
@@ -133,20 +134,26 @@ private fun AetherV2App(
     var xtreamPass by remember { mutableStateOf(prefs.getString("pass", "") ?: "") }
     var m3uUrl by remember { mutableStateOf(prefs.getString("m3u_url", "") ?: "") }
 
+    val playlistScopeKey = remember(playlistMode, xtreamHost, xtreamUser, m3uUrl) {
+        if (playlistMode == "xtream") "xtream_${xtreamHost}_${xtreamUser}"
+        else if (playlistMode == "m3u") "m3u_${m3uUrl}"
+        else "none"
+    }
+
     // Catalog state + in-memory cache for "All"
     var liveCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
-    var selectedLiveCat by remember { mutableStateOf("") }
+    var selectedLiveCat by remember { mutableStateOf(prefs.getString("last_live_cat", "") ?: "") }
     var liveItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var allLiveCache by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var m3uAllItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
 
     var vodCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
-    var selectedVodCat by remember { mutableStateOf("") }
+    var selectedVodCat by remember { mutableStateOf(prefs.getString("last_vod_cat", "") ?: "") }
     var vodItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var allVodCache by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
 
     var seriesCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
-    var selectedSeriesCat by remember { mutableStateOf("") }
+    var selectedSeriesCat by remember { mutableStateOf(prefs.getString("last_series_cat", "") ?: "") }
     var seriesItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var allSeriesCache by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
 
@@ -240,19 +247,33 @@ private fun AetherV2App(
         }
     }
 
-    fun loadLiveCategory(catName: String) {
+    fun loadLiveCategory(catName: String, forceNetwork: Boolean = false) {
         selectedLiveCat = catName
+        prefs.edit().putString("last_live_cat", catName).apply()
         if (catName == "Favorites") return
+
         if (playlistMode == "m3u") {
             liveItems = if (catName == "All") m3uAllItems else m3uAllItems.filter { it.group == catName }
             return
         }
+
+        val itemCacheKey = "${playlistScopeKey}_live_$catName"
+
         if (catName == "All") {
-            if (allLiveCache.isNotEmpty()) {
+            if (!forceNetwork && allLiveCache.isNotEmpty()) {
                 liveItems = allLiveCache
                 return
             }
             scope.launch {
+                if (!forceNetwork) {
+                    val diskItems = PlaylistDiskCache.loadItems(context, itemCacheKey)
+                    if (diskItems.isNotEmpty()) {
+                        allLiveCache = diskItems
+                        liveItems = diskItems
+                        statusMessage = null
+                        return@launch
+                    }
+                }
                 isLoading = true
                 statusMessage = "Loading all live channels..."
                 try {
@@ -263,6 +284,7 @@ private fun AetherV2App(
                     )
                     allLiveCache = parsed
                     liveItems = parsed
+                    PlaylistDiskCache.saveItems(context, itemCacheKey, parsed)
                     statusMessage = null
                 } catch (e: Exception) {
                     statusMessage = "Live error: ${e.message}"
@@ -272,15 +294,26 @@ private fun AetherV2App(
             }
             return
         }
+
         val cat = liveCategories.firstOrNull { it.name == catName } ?: return
         scope.launch {
+            if (!forceNetwork) {
+                val diskItems = PlaylistDiskCache.loadItems(context, itemCacheKey)
+                if (diskItems.isNotEmpty()) {
+                    liveItems = diskItems
+                    statusMessage = null
+                    return@launch
+                }
+            }
             isLoading = true
             statusMessage = "Loading $catName..."
             try {
-                liveItems = XtreamClient.fetchLiveStreams(
+                val parsed = XtreamClient.fetchLiveStreams(
                     "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_live_streams&category_id=${cat.id}",
                     xtreamHost, xtreamUser, xtreamPass, cat.name
                 )
+                liveItems = parsed
+                PlaylistDiskCache.saveItems(context, itemCacheKey, parsed)
                 statusMessage = null
             } catch (e: Exception) {
                 statusMessage = "Live error: ${e.message}"
@@ -290,15 +323,28 @@ private fun AetherV2App(
         }
     }
 
-    fun loadVodCategory(catName: String) {
+    fun loadVodCategory(catName: String, forceNetwork: Boolean = false) {
         selectedVodCat = catName
+        prefs.edit().putString("last_vod_cat", catName).apply()
         if (catName == "Favorites") return
+
+        val itemCacheKey = "${playlistScopeKey}_vod_$catName"
+
         if (catName == "All") {
-            if (allVodCache.isNotEmpty()) {
+            if (!forceNetwork && allVodCache.isNotEmpty()) {
                 vodItems = allVodCache
                 return
             }
             scope.launch {
+                if (!forceNetwork) {
+                    val diskItems = PlaylistDiskCache.loadItems(context, itemCacheKey)
+                    if (diskItems.isNotEmpty()) {
+                        allVodCache = diskItems
+                        vodItems = diskItems
+                        statusMessage = null
+                        return@launch
+                    }
+                }
                 isLoading = true
                 statusMessage = "Loading all movies..."
                 try {
@@ -309,6 +355,7 @@ private fun AetherV2App(
                     )
                     allVodCache = parsed
                     vodItems = parsed
+                    PlaylistDiskCache.saveItems(context, itemCacheKey, parsed)
                     statusMessage = null
                 } catch (e: Exception) {
                     statusMessage = "Movies error: ${e.message}"
@@ -318,15 +365,26 @@ private fun AetherV2App(
             }
             return
         }
+
         val cat = vodCategories.firstOrNull { it.name == catName } ?: return
         scope.launch {
+            if (!forceNetwork) {
+                val diskItems = PlaylistDiskCache.loadItems(context, itemCacheKey)
+                if (diskItems.isNotEmpty()) {
+                    vodItems = diskItems
+                    statusMessage = null
+                    return@launch
+                }
+            }
             isLoading = true
             statusMessage = "Loading $catName..."
             try {
-                vodItems = XtreamClient.fetchVodStreams(
+                val parsed = XtreamClient.fetchVodStreams(
                     "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_vod_streams&category_id=${cat.id}",
                     xtreamHost, xtreamUser, xtreamPass, cat.name
                 )
+                vodItems = parsed
+                PlaylistDiskCache.saveItems(context, itemCacheKey, parsed)
                 statusMessage = null
             } catch (e: Exception) {
                 statusMessage = "Movies error: ${e.message}"
@@ -336,15 +394,28 @@ private fun AetherV2App(
         }
     }
 
-    fun loadSeriesCategory(catName: String) {
+    fun loadSeriesCategory(catName: String, forceNetwork: Boolean = false) {
         selectedSeriesCat = catName
+        prefs.edit().putString("last_series_cat", catName).apply()
         if (catName == "Favorites") return
+
+        val itemCacheKey = "${playlistScopeKey}_series_$catName"
+
         if (catName == "All") {
-            if (allSeriesCache.isNotEmpty()) {
+            if (!forceNetwork && allSeriesCache.isNotEmpty()) {
                 seriesItems = allSeriesCache
                 return
             }
             scope.launch {
+                if (!forceNetwork) {
+                    val diskItems = PlaylistDiskCache.loadItems(context, itemCacheKey)
+                    if (diskItems.isNotEmpty()) {
+                        allSeriesCache = diskItems
+                        seriesItems = diskItems
+                        statusMessage = null
+                        return@launch
+                    }
+                }
                 isLoading = true
                 statusMessage = "Loading all series..."
                 try {
@@ -355,6 +426,7 @@ private fun AetherV2App(
                     )
                     allSeriesCache = parsed
                     seriesItems = parsed
+                    PlaylistDiskCache.saveItems(context, itemCacheKey, parsed)
                     statusMessage = null
                 } catch (e: Exception) {
                     statusMessage = "Series error: ${e.message}"
@@ -364,15 +436,26 @@ private fun AetherV2App(
             }
             return
         }
+
         val cat = seriesCategories.firstOrNull { it.name == catName } ?: return
         scope.launch {
+            if (!forceNetwork) {
+                val diskItems = PlaylistDiskCache.loadItems(context, itemCacheKey)
+                if (diskItems.isNotEmpty()) {
+                    seriesItems = diskItems
+                    statusMessage = null
+                    return@launch
+                }
+            }
             isLoading = true
             statusMessage = "Loading $catName..."
             try {
-                seriesItems = XtreamClient.fetchSeries(
+                val parsed = XtreamClient.fetchSeries(
                     "$xtreamHost/player_api.php?username=$xtreamUser&password=$xtreamPass&action=get_series&category_id=${cat.id}",
                     cat.name
                 )
+                seriesItems = parsed
+                PlaylistDiskCache.saveItems(context, itemCacheKey, parsed)
                 statusMessage = null
             } catch (e: Exception) {
                 statusMessage = "Series error: ${e.message}"
@@ -382,9 +465,19 @@ private fun AetherV2App(
         }
     }
 
-    fun ensureLiveCategories() {
-        if (playlistMode != "xtream" || liveCategories.isNotEmpty()) return
+    fun ensureLiveCategories(forceNetwork: Boolean = false) {
+        if (playlistMode != "xtream" || (!forceNetwork && liveCategories.isNotEmpty())) return
         scope.launch {
+            if (!forceNetwork) {
+                val cachedCats = PlaylistDiskCache.loadCategories(context, "${playlistScopeKey}_live")
+                if (cachedCats.isNotEmpty()) {
+                    liveCategories = cachedCats
+                    val targetCat = selectedLiveCat.takeIf { it.isNotBlank() && (it == "All" || it == "Favorites" || cachedCats.any { c -> c.name == it }) }
+                        ?: cachedCats.first().name
+                    loadLiveCategory(targetCat, forceNetwork = false)
+                    return@launch
+                }
+            }
             isLoading = true
             statusMessage = "Loading live categories..."
             try {
@@ -393,7 +486,8 @@ private fun AetherV2App(
                 )
                 val cats = withContext(Dispatchers.Default) { XtreamClient.parseCategories(json) }
                 liveCategories = cats
-                cats.firstOrNull()?.let { loadLiveCategory(it.name) }
+                PlaylistDiskCache.saveCategories(context, "${playlistScopeKey}_live", cats)
+                cats.firstOrNull()?.let { loadLiveCategory(it.name, forceNetwork = forceNetwork) }
             } catch (e: Exception) {
                 statusMessage = "Live error: ${e.message}"
             } finally {
@@ -402,9 +496,19 @@ private fun AetherV2App(
         }
     }
 
-    fun ensureVodCategories() {
-        if (playlistMode != "xtream" || vodCategories.isNotEmpty()) return
+    fun ensureVodCategories(forceNetwork: Boolean = false) {
+        if (playlistMode != "xtream" || (!forceNetwork && vodCategories.isNotEmpty())) return
         scope.launch {
+            if (!forceNetwork) {
+                val cachedCats = PlaylistDiskCache.loadCategories(context, "${playlistScopeKey}_vod")
+                if (cachedCats.isNotEmpty()) {
+                    vodCategories = cachedCats
+                    val targetCat = selectedVodCat.takeIf { it.isNotBlank() && (it == "All" || it == "Favorites" || cachedCats.any { c -> c.name == it }) }
+                        ?: cachedCats.first().name
+                    loadVodCategory(targetCat, forceNetwork = false)
+                    return@launch
+                }
+            }
             isLoading = true
             statusMessage = "Loading movie categories..."
             try {
@@ -413,7 +517,8 @@ private fun AetherV2App(
                 )
                 val cats = withContext(Dispatchers.Default) { XtreamClient.parseCategories(json) }
                 vodCategories = cats
-                cats.firstOrNull()?.let { loadVodCategory(it.name) }
+                PlaylistDiskCache.saveCategories(context, "${playlistScopeKey}_vod", cats)
+                cats.firstOrNull()?.let { loadVodCategory(it.name, forceNetwork = forceNetwork) }
             } catch (e: Exception) {
                 statusMessage = "Movies error: ${e.message}"
             } finally {
@@ -422,9 +527,19 @@ private fun AetherV2App(
         }
     }
 
-    fun ensureSeriesCategories() {
-        if (playlistMode != "xtream" || seriesCategories.isNotEmpty()) return
+    fun ensureSeriesCategories(forceNetwork: Boolean = false) {
+        if (playlistMode != "xtream" || (!forceNetwork && seriesCategories.isNotEmpty())) return
         scope.launch {
+            if (!forceNetwork) {
+                val cachedCats = PlaylistDiskCache.loadCategories(context, "${playlistScopeKey}_series")
+                if (cachedCats.isNotEmpty()) {
+                    seriesCategories = cachedCats
+                    val targetCat = selectedSeriesCat.takeIf { it.isNotBlank() && (it == "All" || it == "Favorites" || cachedCats.any { c -> c.name == it }) }
+                        ?: cachedCats.first().name
+                    loadSeriesCategory(targetCat, forceNetwork = false)
+                    return@launch
+                }
+            }
             isLoading = true
             statusMessage = "Loading series categories..."
             try {
@@ -433,7 +548,8 @@ private fun AetherV2App(
                 )
                 val cats = withContext(Dispatchers.Default) { XtreamClient.parseCategories(json) }
                 seriesCategories = cats
-                cats.firstOrNull()?.let { loadSeriesCategory(it.name) }
+                PlaylistDiskCache.saveCategories(context, "${playlistScopeKey}_series", cats)
+                cats.firstOrNull()?.let { loadSeriesCategory(it.name, forceNetwork = forceNetwork) }
             } catch (e: Exception) {
                 statusMessage = "Series error: ${e.message}"
             } finally {
@@ -442,7 +558,7 @@ private fun AetherV2App(
         }
     }
 
-    fun connectXtream(rawHost: String, rawUser: String, rawPass: String) {
+    fun connectXtream(rawHost: String, rawUser: String, rawPass: String, forceRefresh: Boolean = true) {
         val base = XtreamClient.normalizeHost(rawHost)
         val u = rawUser.trim()
         val p = rawPass.trim()
@@ -465,21 +581,41 @@ private fun AetherV2App(
             .putString("user", u)
             .putString("pass", p)
             .apply()
-        ensureLiveCategories()
+        scope.launch {
+            if (forceRefresh) PlaylistDiskCache.clearAll(context)
+            ensureLiveCategories(forceNetwork = forceRefresh)
+        }
     }
 
-    fun connectM3u(url: String) {
+    fun connectM3u(url: String, forceRefresh: Boolean = true) {
         val cleanUrl = url.trim()
         playlistMode = "m3u"
         m3uUrl = cleanUrl
         prefs.edit().putString("mode", "m3u").putString("m3u_url", cleanUrl).apply()
+        val m3uCacheKey = "m3u_${cleanUrl}_all"
         scope.launch {
+            if (forceRefresh) {
+                PlaylistDiskCache.clearAll(context)
+            } else {
+                val cached = PlaylistDiskCache.loadItems(context, m3uCacheKey)
+                if (cached.isNotEmpty()) {
+                    m3uAllItems = cached
+                    val groups = cached.map { it.group }.distinct().sorted()
+                    liveCategories = groups.map { CategoryItem(it, it) }
+                    val targetCat = selectedLiveCat.takeIf { it.isNotBlank() && (it == "All" || it == "Favorites" || groups.contains(it)) } ?: "All"
+                    selectedLiveCat = targetCat
+                    liveItems = if (targetCat == "All") cached else cached.filter { it.group == targetCat }
+                    statusMessage = null
+                    return@launch
+                }
+            }
             isLoading = true
             statusMessage = "Loading M3U playlist..."
             try {
                 val body = XtreamClient.fetchText(cleanUrl)
                 val parsed = withContext(Dispatchers.Default) { XtreamClient.parseM3u(body) }
                 m3uAllItems = parsed
+                PlaylistDiskCache.saveItems(context, m3uCacheKey, parsed)
                 val groups = parsed.map { it.group }.distinct().sorted()
                 liveCategories = groups.map { CategoryItem(it, it) }
                 selectedLiveCat = "All"
@@ -495,9 +631,9 @@ private fun AetherV2App(
 
     LaunchedEffect(Unit) {
         if (playlistMode == "xtream" && xtreamHost.isNotBlank() && xtreamUser.isNotBlank() && xtreamPass.isNotBlank()) {
-            ensureLiveCategories()
+            ensureLiveCategories(forceNetwork = false)
         } else if (playlistMode == "m3u" && m3uUrl.isNotBlank()) {
-            connectM3u(m3uUrl)
+            connectM3u(m3uUrl, forceRefresh = false)
         }
     }
 
@@ -550,9 +686,9 @@ private fun AetherV2App(
                     title = tabs[selectedTab].label,
                     onSearchClick = { showSearch = !showSearch },
                     onFilterClick = {
-                        if (selectedTab == 1) ensureLiveCategories()
-                        if (selectedTab == 2) ensureVodCategories()
-                        if (selectedTab == 3) ensureSeriesCategories()
+                        if (selectedTab == 1) ensureLiveCategories(forceNetwork = false)
+                        if (selectedTab == 2) ensureVodCategories(forceNetwork = false)
+                        if (selectedTab == 3) ensureSeriesCategories(forceNetwork = false)
                     },
                     onAddClick = { showAddDialog = true }
                 )
@@ -614,7 +750,7 @@ private fun AetherV2App(
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
                             emptyMessage = if (playlistMode.isBlank()) "Tap + to add your playlist" else "No live channels in this category",
-                            onSelectCategory = { loadLiveCategory(it) },
+                            onSelectCategory = { loadLiveCategory(it, forceNetwork = false) },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
                             onPlayClick = { playItem(it) }
@@ -640,7 +776,7 @@ private fun AetherV2App(
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes playlist for Movies" else "No movies in this category",
-                            onSelectCategory = { loadVodCategory(it) },
+                            onSelectCategory = { loadVodCategory(it, forceNetwork = false) },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
                             onPlayClick = { playItem(it) }
@@ -666,7 +802,7 @@ private fun AetherV2App(
                             favoriteIds = favoriteIds,
                             isLoading = isLoading,
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes playlist for Series" else "No series in this category",
-                            onSelectCategory = { loadSeriesCategory(it) },
+                            onSelectCategory = { loadSeriesCategory(it, forceNetwork = false) },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
                             onPlayClick = { openDetail(it) }
@@ -684,9 +820,9 @@ private fun AetherV2App(
                             recentCount = recents.size,
                             onRefreshPlaylist = {
                                 if (playlistMode == "xtream" && xtreamHost.isNotBlank()) {
-                                    connectXtream(xtreamHost, xtreamUser, xtreamPass)
+                                    connectXtream(xtreamHost, xtreamUser, xtreamPass, forceRefresh = true)
                                 } else if (playlistMode == "m3u" && m3uUrl.isNotBlank()) {
-                                    connectM3u(m3uUrl)
+                                    connectM3u(m3uUrl, forceRefresh = true)
                                 }
                             },
                             onAddOrChangePlaylist = { showAddDialog = true },
@@ -709,6 +845,7 @@ private fun AetherV2App(
                                 m3uAllItems = emptyList()
                                 favorites = emptyList()
                                 recents = emptyList()
+                                scope.launch { PlaylistDiskCache.clearAll(context) }
                                 statusMessage = "Cleared all saved data"
                             }
                         )
@@ -724,9 +861,9 @@ private fun AetherV2App(
                 selectedDetailItem = null
                 selectedTab = idx
                 searchQuery = ""
-                if (idx == 1) ensureLiveCategories()
-                if (idx == 2) ensureVodCategories()
-                if (idx == 3) ensureSeriesCategories()
+                if (idx == 1) ensureLiveCategories(forceNetwork = false)
+                if (idx == 2) ensureVodCategories(forceNetwork = false)
+                if (idx == 3) ensureSeriesCategories(forceNetwork = false)
             },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
@@ -741,11 +878,11 @@ private fun AetherV2App(
             onDismiss = { showAddDialog = false },
             onLoadXtream = { h, u, p ->
                 showAddDialog = false
-                connectXtream(h, u, p)
+                connectXtream(h, u, p, forceRefresh = true)
             },
             onLoadM3u = { url ->
                 showAddDialog = false
-                connectM3u(url)
+                connectM3u(url, forceRefresh = true)
             }
         )
     }
