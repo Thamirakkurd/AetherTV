@@ -25,6 +25,7 @@ import com.aethertv.v2.ui.components.FloatingGlassNavBar
 import com.aethertv.v2.ui.components.GlassMediaCard
 import com.aethertv.v2.ui.components.GlassTopHeader
 import com.aethertv.v2.ui.components.NavTabItem
+import com.aethertv.v2.ui.screens.HomeScreen
 import com.aethertv.v2.ui.theme.MatteGlassTheme
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 
@@ -54,7 +55,7 @@ private fun AetherV2Shell() {
             NavTabItem("Settings", Icons.Default.Settings)
         )
     }
-    var selectedTab by remember { mutableIntStateOf(1) }
+    var selectedTab by remember { mutableIntStateOf(0) }
 
     val demoItems = remember(selectedTab) {
         val prefix = tabs[selectedTab].label
@@ -74,22 +75,26 @@ private fun AetherV2Shell() {
                 onAddClick = {}
             )
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 104.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                itemsIndexed(demoItems) { idx, title ->
-                    GlassMediaCard(
-                        title = title,
-                        subtitle = if (selectedTab == 1) "HD Stream • Sports & Entertainment" else "2026 • Action / Drama",
-                        badgeText = if (selectedTab == 1) "LIVE" else "4K UHD",
-                        showLiveDot = selectedTab == 1,
-                        toneIndex = idx,
-                        onClick = {}
-                    )
+            if (selectedTab == 0) {
+                HomeScreen()
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 104.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    itemsIndexed(demoItems) { idx, title ->
+                        GlassMediaCard(
+                            title = title,
+                            subtitle = if (selectedTab == 1) "HD Stream • Sports & Entertainment" else "2026 • Action / Drama",
+                            badgeText = if (selectedTab == 1) "LIVE" else "4K UHD",
+                            showLiveDot = selectedTab == 1,
+                            toneIndex = idx,
+                            onClick = {}
+                        )
+                    }
                 }
             }
         }
