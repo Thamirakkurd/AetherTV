@@ -4,6 +4,8 @@ on:
   push:
     branches: [ main, v2 ]
     tags: [ 'v*' ]
+  release:
+    types: [ published ]
   workflow_dispatch:
 
 permissions:
@@ -31,7 +33,7 @@ jobs:
           name: AetherTV-v2-debug-apk
           path: AetherTV-v2.apk
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: AetherTV-v2.apk
