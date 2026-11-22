@@ -252,10 +252,11 @@ fun GlassMediaCard(
     imageUrl: String? = null,
     isFavorite: Boolean = false,
     onFavoriteClick: () -> Unit = {},
-    onMoreClick: () -> Unit = {},
+    onPlayClick: () -> Unit = {},
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showMenu by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(4.dp)
     val placeholderBrush = when (toneIndex % 4) {
         0 -> Brush.verticalGradient(listOf(Color(0xFFD4D4D8), Color(0xFF52525B), Color(0xFF18181B)))
@@ -290,7 +291,7 @@ fun GlassMediaCard(
                 .border(1.dp, MatteGlassTokens.CardInnerEdge, RoundedCornerShape(3.dp))
         )
 
-        // Top-right translucent circular action icons
+        // Top-right translucent circular action icons + quick menu
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -302,11 +303,45 @@ fun GlassMediaCard(
                 contentDescription = "Favorite",
                 onClick = onFavoriteClick
             )
-            CardTopCircleIcon(
-                icon = Icons.Default.MoreHoriz,
-                contentDescription = "More",
-                onClick = onMoreClick
-            )
+            Box {
+                CardTopCircleIcon(
+                    icon = Icons.Default.MoreHoriz,
+                    contentDescription = "More",
+                    onClick = { showMenu = true }
+                )
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    containerColor = MatteGlassTokens.CanvasWhite
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Details", color = MatteGlassTokens.CharcoalPrimary) },
+                        onClick = {
+                            showMenu = false
+                            onClick()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Play Now", color = MatteGlassTokens.CharcoalPrimary) },
+                        onClick = {
+                            showMenu = false
+                            onPlayClick()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (isFavorite) "Remove Favorite" else "Add to Favorites",
+                                color = MatteGlassTokens.CharcoalPrimary
+                            )
+                        },
+                        onClick = {
+                            showMenu = false
+                            onFavoriteClick()
+                        }
+                    )
+                }
+            }
         }
 
         // Bottom smooth dark scrim + title, subtitle, and metadata row
@@ -370,17 +405,18 @@ fun GlassMediaCard(
 
                 Box(
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(28.dp)
                         .clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.16f))
-                        .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape),
+                        .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                        .clickable(onClick = onPlayClick),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Play",
+                        contentDescription = "Play Now",
                         tint = Color.White,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }

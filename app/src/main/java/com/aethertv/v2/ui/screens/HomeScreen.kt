@@ -41,6 +41,7 @@ fun HomeScreen(
     hasPlaylist: Boolean,
     onItemClick: (MediaItem) -> Unit,
     onFavoriteClick: (MediaItem) -> Unit,
+    onPlayClick: (MediaItem) -> Unit,
     onAddPlaylistClick: () -> Unit
 ) {
     LazyColumn(
@@ -146,6 +147,7 @@ fun HomeScreen(
                                     imageUrl = item.posterUrl,
                                     isFavorite = favoriteIds.contains(item.id),
                                     onFavoriteClick = { onFavoriteClick(item) },
+                                    onPlayClick = { onPlayClick(item) },
                                     onClick = { onItemClick(item) },
                                     modifier = Modifier.fillMaxWidth()
                                 )

@@ -53,7 +53,7 @@ fun MediaDetailScreen(
         if (selectedSeason.isBlank()) episodes else episodes.filter { it.season == selectedSeason }
     }
 
-    val heroImage = detailInfo.backdropUrl ?: item.posterUrl
+    val heroImage = item.posterUrl?.takeIf { it.isNotBlank() } ?: detailInfo.backdropUrl
 
     LazyColumn(
         modifier = Modifier

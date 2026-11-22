@@ -27,7 +27,8 @@ fun MediaGridScreen(
     emptyMessage: String,
     onSelectCategory: (String) -> Unit,
     onItemClick: (MediaItem) -> Unit,
-    onFavoriteClick: (MediaItem) -> Unit
+    onFavoriteClick: (MediaItem) -> Unit,
+    onPlayClick: (MediaItem) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         CategoryChipRow(
@@ -77,6 +78,7 @@ fun MediaGridScreen(
                         imageUrl = item.posterUrl,
                         isFavorite = favoriteIds.contains(item.id),
                         onFavoriteClick = { onFavoriteClick(item) },
+                        onPlayClick = { onPlayClick(item) },
                         onClick = { onItemClick(item) }
                     )
                 }

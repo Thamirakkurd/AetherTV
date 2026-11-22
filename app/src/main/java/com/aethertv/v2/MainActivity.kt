@@ -467,6 +467,8 @@ private fun AetherV2App() {
                             hasPlaylist = playlistMode.isNotBlank(),
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
+                            onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) },
+                            onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) },
                             onAddPlaylistClick = { showAddDialog = true }
                         )
                     }
@@ -494,7 +496,8 @@ private fun AetherV2App() {
                             emptyMessage = if (playlistMode.isBlank()) "Tap + to add your playlist" else "No live channels in this category",
                             onSelectCategory = { loadLiveCategory(it) },
                             onItemClick = { openDetail(it) },
-                            onFavoriteClick = { toggleFavorite(it) }
+                            onFavoriteClick = { toggleFavorite(it) },
+                            onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) }
                         )
                     }
                     2 -> {
@@ -517,7 +520,8 @@ private fun AetherV2App() {
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes playlist for Movies" else "No movies in this category",
                             onSelectCategory = { loadVodCategory(it) },
                             onItemClick = { openDetail(it) },
-                            onFavoriteClick = { toggleFavorite(it) }
+                            onFavoriteClick = { toggleFavorite(it) },
+                            onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) }
                         )
                     }
                     3 -> {
@@ -540,7 +544,8 @@ private fun AetherV2App() {
                             emptyMessage = if (playlistMode != "xtream") "Add an Xtream Codes playlist for Series" else "No series in this category",
                             onSelectCategory = { loadSeriesCategory(it) },
                             onItemClick = { openDetail(it) },
-                            onFavoriteClick = { toggleFavorite(it) }
+                            onFavoriteClick = { toggleFavorite(it) },
+                            onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) }
                         )
                     }
                     4 -> {
