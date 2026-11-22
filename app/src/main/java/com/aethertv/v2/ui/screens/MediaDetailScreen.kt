@@ -2,24 +2,21 @@ package com.aethertv.v2.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +24,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +33,7 @@ import com.aethertv.v2.data.ContentType
 import com.aethertv.v2.data.EpisodeItem
 import com.aethertv.v2.data.MediaDetailInfo
 import com.aethertv.v2.data.MediaItem
+import com.aethertv.v2.ui.components.GlassCircleActionButton
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 
 @Composable
@@ -52,357 +51,381 @@ fun MediaDetailScreen(
     onDownloadEpisode: (EpisodeItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val borderColor = Color.Black.copy(alpha = 0.12f)
+    val seasons = remember(episodes) { episodes.map { it.season }.distinct() }
+    var selectedSeason by remember(seasons) { mutableStateOf(seasons.firstOrNull() ?: "") }
+    val visibleEpisodes = remember(episodes, selectedSeason) {
+        if (selectedSeason.isBlank()) episodes else episodes.filter { it.season == selectedSeason }
+    }
+
+    val heroImage = item.posterUrl?.takeIf { it.isNotBlank() } ?: detailInfo.backdropUrl
+    val showMovieDownload = item.contentType != ContentType.SERIES && item.contentType != ContentType.LIVE
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .background(MatteGlassTokens.CanvasWhite),
-        contentPadding = PaddingValues(bottom = 110.dp)
+        contentPadding = PaddingValues(bottom = 112.dp)
     ) {
+        // Hero Poster with smooth fade into pure white canvas
         item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(290.dp)
-                    .background(Color(0xFFE9ECF2))
+                    .height(440.dp)
             ) {
-                val heroUrl = detailInfo.backdropUrl ?: item.posterUrl
-                if (!heroUrl.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFFD4D4D8), Color(0xFF71717A), Color(0xFFFFFFFF))
+                            )
+                        )
+                )
+
+                if (!heroImage.isNullOrBlank()) {
                     AsyncImage(
-                        model = heroUrl,
+                        model = heroImage,
                         contentDescription = item.name,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.matchParentSize()
                     )
                 }
 
+                // Bottom fade into pure white canvas
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(190.dp)
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
-                                    Color.Black.copy(alpha = 0.28f),
                                     Color.Transparent,
+                                    MatteGlassTokens.CanvasWhite.copy(alpha = 0.75f),
                                     MatteGlassTokens.CanvasWhite
                                 )
                             )
                         )
                 )
 
+                // Top floating frosted Back & Favorite buttons
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.88f))
-                            .border(BorderStroke(1.dp, borderColor), CircleShape)
-                            .clickable(onClick = onBack),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MatteGlassTokens.CharcoalPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.88f))
-                            .border(BorderStroke(1.dp, borderColor), CircleShape)
-                            .clickable(onClick = onToggleFavorite),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (isFavorite) MatteGlassTokens.NotificationDot else MatteGlassTokens.CharcoalPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(108.dp)
-                        .height(158.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White)
-                        .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (!item.posterUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = item.posterUrl,
-                            contentDescription = item.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Movie,
-                            contentDescription = null,
-                            tint = MatteGlassTokens.CharcoalMuted,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
+                    GlassCircleActionButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = onBack
+                    )
+                    GlassCircleActionButton(
+                        icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = "Favorite",
+                        onClick = onToggleFavorite
+                    )
                 }
 
+                // Centered Title overlapping the bottom fade
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = item.name,
-                        fontSize = 20.sp,
+                        fontSize = 26.sp,
                         fontWeight = FontWeight.Bold,
                         color = MatteGlassTokens.CharcoalPrimary,
-                        maxLines = 3,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 30.sp,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-
-                    val metaParts = buildList {
-                        if (detailInfo.rating.isNotBlank()) add("★ ${detailInfo.rating}")
-                        if (detailInfo.duration.isNotBlank()) add(detailInfo.duration)
-                        if (item.group.isNotBlank()) add(item.group)
-                    }
-                    if (metaParts.isNotEmpty()) {
-                        Text(
-                            text = metaParts.joinToString("  •  "),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MatteGlassTokens.CharcoalMuted
-                        )
-                    }
-
-                    if (detailInfo.genre.isNotBlank()) {
-                        Text(
-                            text = detailInfo.genre,
-                            fontSize = 12.sp,
-                            color = MatteGlassTokens.CharcoalMuted
-                        )
-                    }
                 }
             }
         }
 
+        // Metadata pills, genre line, Watch Now + Download CTAs, and unboxed overview
         item {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(horizontal = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(50.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MatteGlassTokens.CharcoalPrimary)
-                        .clickable {
-                            if (item.contentType == ContentType.SERIES && episodes.isNotEmpty()) {
-                                onEpisodeClick(episodes.first())
-                            } else {
-                                onWatchNow()
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Watch Now",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
+                Spacer(Modifier.height(10.dp))
+
+                val pills = buildList {
+                    add(item.group.ifBlank { item.contentType.name })
+                    if (detailInfo.releaseYear.isNotBlank()) {
+                        add(detailInfo.releaseYear)
+                    }
+                    val ratingText = detailInfo.rating.ifBlank { item.badge }
+                    if (ratingText.isNotBlank() && ratingText != "0") {
+                        add(
+                            if (ratingText.startsWith("★") || ratingText == "LIVE") ratingText
+                            else "★ $ratingText"
                         )
-                        Text(
-                            text = if (item.contentType == ContentType.SERIES) "Watch S1:E1" else "Watch Now",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
+                    }
+                    if (detailInfo.duration.isNotBlank()) {
+                        add(detailInfo.duration)
                     }
                 }
 
-                if (item.contentType == ContentType.MOVIE) {
-                    Box(
-                        modifier = Modifier
-                            .height(50.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color.White)
-                            .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(16.dp))
-                            .clickable(onClick = onDownloadItem)
-                            .padding(horizontal = 16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = "Download Movie",
-                                tint = MatteGlassTokens.CharcoalPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Text(
-                                text = "Download",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MatteGlassTokens.CharcoalPrimary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        if (isLoading) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 20.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        color = MatteGlassTokens.CharcoalPrimary,
-                        strokeWidth = 2.5.dp,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
-            }
-        }
-
-        if (detailInfo.plot.isNotBlank()) {
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White)
-                        .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(16.dp))
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = "Overview",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MatteGlassTokens.CharcoalPrimary
-                    )
-                    Text(
-                        text = detailInfo.plot,
-                        fontSize = 13.sp,
-                        lineHeight = 19.sp,
-                        color = MatteGlassTokens.CharcoalMuted
-                    )
-                }
-            }
-        }
-
-        if (item.contentType == ContentType.SERIES && episodes.isNotEmpty()) {
-            item {
-                Text(
-                    text = "Episodes (${episodes.size})",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MatteGlassTokens.CharcoalPrimary,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
-                )
-            }
-
-            items(episodes, key = { it.id }) { ep ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color.White)
-                        .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(14.dp))
-                        .clickable { onEpisodeClick(ep) }
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = ep.season,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MatteGlassTokens.CharcoalMuted
-                        )
-                        Text(
-                            text = ep.title,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MatteGlassTokens.CharcoalPrimary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    items(pills) { pillText ->
+                        DetailPill(text = pillText)
                     }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                }
+
+                val metaLine = buildList {
+                    if (detailInfo.genre.isNotBlank()) add(detailInfo.genre)
+                    else add(item.group)
+                }.joinToString(" • ")
+
+                if (metaLine.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = metaLine,
+                        fontSize = 13.sp,
+                        color = MatteGlassTokens.CharcoalMuted,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(Modifier.height(18.dp))
+
+                // Primary Watch Now CTA (+ Download button for movies)
+                val ctaLabel = if (item.contentType == ContentType.SERIES) {
+                    if (episodes.isNotEmpty()) "Play First Episode" else "Watch Now"
+                } else {
+                    "Watch Now"
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MatteGlassTokens.CharcoalPrimary,
+                        shadowElevation = 0.dp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                if (item.contentType == ContentType.SERIES && episodes.isNotEmpty()) {
+                                    onEpisodeClick(episodes.first())
+                                } else {
+                                    onWatchNow()
+                                }
+                            }
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(MatteGlassTokens.CanvasWhite)
-                                .clickable { onDownloadEpisode(ep) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = "Download Episode",
-                                tint = MatteGlassTokens.CharcoalPrimary,
-                                modifier = Modifier.size(17.dp)
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(MatteGlassTokens.CharcoalPrimary),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Play Episode",
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
+                                contentDescription = null,
+                                tint = MatteGlassTokens.CanvasWhite,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = ctaLabel,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MatteGlassTokens.CanvasWhite
                             )
                         }
+                    }
+
+                    if (showMovieDownload) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MatteGlassTokens.HeaderPillBg,
+                            border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+                            shadowElevation = 0.dp,
+                            modifier = Modifier
+                                .height(50.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onDownloadItem() }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = "Download",
+                                    tint = MatteGlassTokens.CharcoalPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Download",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MatteGlassTokens.CharcoalPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (isLoading) {
+                    Spacer(Modifier.height(14.dp))
+                    LinearProgressIndicator(
+                        color = MatteGlassTokens.CharcoalPrimary,
+                        trackColor = MatteGlassTokens.HeaderPillBg,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (detailInfo.plot.isNotBlank()) {
+                    Spacer(Modifier.height(18.dp))
+                    Text(
+                        text = detailInfo.plot,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        color = MatteGlassTokens.CharcoalMuted,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+
+        // Episodes section for Series
+        if (item.contentType == ContentType.SERIES && episodes.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(22.dp))
+                Text(
+                    text = "Episodes",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MatteGlassTokens.CharcoalPrimary,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+                if (seasons.size > 1) {
+                    Spacer(Modifier.height(10.dp))
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(seasons) { season ->
+                            val selected = season == selectedSeason
+                            Surface(
+                                shape = CircleShape,
+                                color = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.HeaderPillBg,
+                                border = if (selected) null else BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+                                shadowElevation = 0.dp,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable { selectedSeason = season }
+                            ) {
+                                Text(
+                                    text = season,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                    color = if (selected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+
+            items(visibleEpisodes, key = { it.id }) { ep ->
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MatteGlassTokens.HeaderPillBg,
+                    border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+                    shadowElevation = 0.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onEpisodeClick(ep) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = ep.title,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MatteGlassTokens.CharcoalPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = ep.season,
+                                fontSize = 12.sp,
+                                color = MatteGlassTokens.CharcoalMuted
+                            )
+                        }
+                        IconButton(onClick = { onDownloadEpisode(ep) }) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = "Download episode",
+                                tint = MatteGlassTokens.CharcoalAction,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Play episode",
+                            tint = MatteGlassTokens.CharcoalAction,
+                            modifier = Modifier
+                                .padding(end = 6.dp)
+                                .size(20.dp)
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DetailPill(text: String) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = MatteGlassTokens.HeaderPillBg,
+        border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
+        shadowElevation = 0.dp
+    ) {
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MatteGlassTokens.CharcoalPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+        )
     }
 }
