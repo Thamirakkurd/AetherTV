@@ -22,6 +22,15 @@ data class MediaItem(
     val badge: String = ""
 )
 
+data class MediaDetailInfo(
+    val plot: String = "",
+    val genre: String = "",
+    val releaseYear: String = "",
+    val rating: String = "",
+    val duration: String = "",
+    val backdropUrl: String? = null
+)
+
 data class EpisodeItem(
     val id: String,
     val season: String,

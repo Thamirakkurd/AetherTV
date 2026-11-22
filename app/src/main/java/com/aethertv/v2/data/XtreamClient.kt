@@ -153,6 +153,55 @@ object XtreamClient {
         return out
     }
 
+    fun parseVodDetail(json: String): MediaDetailInfo {
+        return try {
+            val root = JSONObject(json)
+            val info = root.optJSONObject("info") ?: return MediaDetailInfo()
+            val backdrops = info.optJSONArray("backdrop_path")
+            val backdrop = if (backdrops != null && backdrops.length() > 0) {
+                backdrops.optString(0, "").trim().ifEmpty { null }
+            } else {
+                info.safeStr("movie_image").ifEmpty { null }
+            }
+            val releaseDate = info.safeStr("releasedate").ifEmpty { info.safeStr("release_date") }
+            val year = if (releaseDate.length >= 4) releaseDate.take(4) else releaseDate
+            MediaDetailInfo(
+                plot = info.safeStr("plot").ifEmpty { info.safeStr("description") },
+                genre = info.safeStr("genre"),
+                releaseYear = year,
+                rating = info.safeStr("rating"),
+                duration = info.safeStr("duration"),
+                backdropUrl = backdrop
+            )
+        } catch (_: Exception) {
+            MediaDetailInfo()
+        }
+    }
+
+    fun parseSeriesDetail(json: String): MediaDetailInfo {
+        return try {
+            val root = JSONObject(json)
+            val info = root.optJSONObject("info") ?: return MediaDetailInfo()
+            val backdrops = info.optJSONArray("backdrop_path")
+            val backdrop = if (backdrops != null && backdrops.length() > 0) {
+                backdrops.optString(0, "").trim().ifEmpty { null }
+            } else {
+                info.safeStr("cover").ifEmpty { null }
+            }
+            val releaseDate = info.safeStr("releaseDate").ifEmpty { info.safeStr("release_date") }
+            val year = if (releaseDate.length >= 4) releaseDate.take(4) else releaseDate
+            MediaDetailInfo(
+                plot = info.safeStr("plot"),
+                genre = info.safeStr("genre"),
+                releaseYear = year,
+                rating = info.safeStr("rating"),
+                backdropUrl = backdrop
+            )
+        } catch (_: Exception) {
+            MediaDetailInfo()
+        }
+    }
+
     fun parseSeriesEpisodes(
         json: String,
         host: String,
