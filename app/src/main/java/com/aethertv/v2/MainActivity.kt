@@ -468,7 +468,6 @@ private fun AetherV2App() {
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
                             onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) },
-                            onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) },
                             onAddPlaylistClick = { showAddDialog = true }
                         )
                     }
