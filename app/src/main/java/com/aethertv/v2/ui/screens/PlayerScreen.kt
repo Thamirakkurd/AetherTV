@@ -79,6 +79,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -437,12 +438,17 @@ fun UnifiedMorphPlayerOverlay(
     val exoPlayer = remember { createAetherExoPlayer(context) }
 
     // Smoothly sync expandAnim with isMiniPlayer state changes (taps, back button, new item)
+    var pendingFlingVelocity by remember { mutableFloatStateOf(0f) }
+
     LaunchedEffect(isMiniPlayer) {
         val target = if (isMiniPlayer) 0f else 1f
         if (isMiniPlayer && effectiveFullscreen) exitFullscreen()
+        val flingVel = pendingFlingVelocity
+        pendingFlingVelocity = 0f
         expandAnim.animateTo(
             targetValue = target,
-            animationSpec = spring(dampingRatio = 0.86f, stiffness = 380f)
+            initialVelocity = flingVel,
+            animationSpec = spring(dampingRatio = 0.82f, stiffness = 300f)
         )
     }
 
@@ -686,7 +692,7 @@ fun UnifiedMorphPlayerOverlay(
         val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         val animatedMiniBottom by animateDpAsState(
             targetValue = if (barsVisible) navBottom + 78.dp else navBottom + 10.dp,
-            animationSpec = tween(220, easing = FastOutSlowInEasing),
+            animationSpec = spring(dampingRatio = 0.80f, stiffness = 340f),
             label = "miniDockBottom"
         )
 
@@ -720,13 +726,21 @@ fun UnifiedMorphPlayerOverlay(
                     .background(Color(0xFF0A0C10))
             )
 
-            // Below-video scrollable sheet (slides down & fades out continuously with p)
+            // Below-video scrollable sheet (fixed height + GPU translation -> butter-smooth 120fps drag)
+            val expandedFeedH = (screenH - statusBarTop - expandedVideoH).coerceAtLeast(0.dp)
+            val videoBottomPx = with(density) { (videoY + videoH).toPx() }
             Box(
                 modifier = Modifier
-                    .offset(x = 0.dp, y = videoY + videoH)
                     .fillMaxWidth()
-                    .height((screenH - (videoY + videoH)).coerceAtLeast(0.dp))
-                    .graphicsLayer { alpha = feedAlpha }
+                    .height(expandedFeedH)
+                    .graphicsLayer {
+                        translationY = videoBottomPx
+                        alpha = feedAlpha
+                        val s = 0.965f + 0.035f * feedAlpha
+                        scaleX = s
+                        scaleY = s
+                        compositingStrategy = CompositingStrategy.ModulateAlpha
+                    }
                     .background(ambientBg)
             ) {
                 if (isLive) {
@@ -792,7 +806,7 @@ fun UnifiedMorphPlayerOverlay(
                         shape = dockShape,
                         tintColor = MatteGlassTokens.NavGlassBg,
                         fallbackColor = MatteGlassTokens.NavGlassFallback,
-                        blurRadius = 26.dp,
+                        blurRadius = 32.dp,
                         borderWidth = 0.9.dp,
                         borderBrush = MatteGlassTokens.SpecularBorderBrush
                     )
@@ -1121,16 +1135,22 @@ fun UnifiedMorphPlayerOverlay(
                                 onDragEnd = {
                                     val vy = tracker.calculateVelocity().y
                                     val curP = expandAnim.value
+                                    val normVel = (-vy / dragSpanPx).coerceIn(-6f, 6f)
                                     when {
                                         cumulativeY < -88f && curP > 0.95f -> {
                                             enterFullscreen()
                                         }
-                                        curP < 0.68f || vy > 650f -> {
+                                        curP < 0.68f || vy > 560f -> {
+                                            pendingFlingVelocity = normVel
                                             onToggleMinimizeState(true)
                                         }
                                         else -> {
                                             scope.launch {
-                                                expandAnim.animateTo(1f, spring(dampingRatio = 0.86f, stiffness = 380f))
+                                                expandAnim.animateTo(
+                                                    targetValue = 1f,
+                                                    initialVelocity = normVel,
+                                                    animationSpec = spring(dampingRatio = 0.82f, stiffness = 300f)
+                                                )
                                             }
                                         }
                                     }
@@ -1171,11 +1191,17 @@ fun UnifiedMorphPlayerOverlay(
                                 onDragEnd = {
                                     val vy = tracker.calculateVelocity().y
                                     val curP = expandAnim.value
-                                    if (curP > 0.24f || vy < -650f) {
+                                    val normVel = (-vy / dragSpanPx).coerceIn(-6f, 6f)
+                                    if (curP > 0.22f || vy < -560f) {
+                                        pendingFlingVelocity = normVel
                                         onToggleMinimizeState(false)
                                     } else {
                                         scope.launch {
-                                            expandAnim.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 380f))
+                                            expandAnim.animateTo(
+                                                targetValue = 0f,
+                                                initialVelocity = normVel,
+                                                animationSpec = spring(dampingRatio = 0.82f, stiffness = 300f)
+                                            )
                                         }
                                     }
                                 },
@@ -1879,7 +1905,7 @@ private fun LiveFeedBelowPlayer(
                     shape = barShape,
                     tintColor = MatteGlassTokens.NavGlassBg,
                     fallbackColor = MatteGlassTokens.NavGlassFallback,
-                    blurRadius = 26.dp,
+                    blurRadius = 32.dp,
                     borderWidth = 0.9.dp,
                     borderBrush = MatteGlassTokens.SpecularBorderBrush
                 )

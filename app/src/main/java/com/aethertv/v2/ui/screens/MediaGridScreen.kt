@@ -2,6 +2,7 @@ package com.aethertv.v2.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -79,13 +80,13 @@ fun MediaGridScreen(
                     columns = GridCells.Fixed(2),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 6.dp,
-                        end = 6.dp,
+                        start = 3.dp,
+                        end = 3.dp,
                         top = topInset + 62.dp,
                         bottom = navInset + 86.dp + extraBottomPadding
                     ),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     items(items, key = { it.id }, contentType = { "poster_card" }) { item ->
                         PosterMediaCard(
@@ -107,8 +108,8 @@ fun MediaGridScreen(
 
         AnimatedVisibility(
             visible = topBarVisible,
-            enter = slideInVertically(tween(220, easing = FastOutSlowInEasing)) { -it } + fadeIn(tween(180)),
-            exit = slideOutVertically(tween(200, easing = FastOutSlowInEasing)) { -it } + fadeOut(tween(160)),
+            enter = slideInVertically(spring(dampingRatio = 0.82f, stiffness = 360f)) { -it } + fadeIn(tween(180)),
+            exit = slideOutVertically(spring(dampingRatio = 0.86f, stiffness = 400f)) { -it } + fadeOut(tween(160)),
             modifier = Modifier.align(Alignment.TopCenter)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {

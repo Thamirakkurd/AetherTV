@@ -21,8 +21,8 @@ android {
         applicationId = "com.aethertv.v2"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "3.3.2"
+        versionCode = 9
+        versionName = "3.3.3"
     }
 
     buildTypes {

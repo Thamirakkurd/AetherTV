@@ -33,6 +33,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import kotlin.math.roundToInt
+import kotlin.math.abs
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -74,10 +77,12 @@ private val CardIconBorder = BorderStroke(0.9.dp, Color.White.copy(alpha = 0.36f
 fun FloatingGlassNavBar(
     items: List<NavTabItem>,
     selectedIndex: Int,
+    pagePosition: Float = selectedIndex.toFloat(),
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val hazeState = LocalHazeState.current
+    val density = LocalDensity.current
     val capsuleShape = RoundedCornerShape(30.dp)
     val activePillShape = RoundedCornerShape(22.dp)
 
@@ -88,83 +93,96 @@ fun FloatingGlassNavBar(
             .padding(horizontal = 14.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
-        Row(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(60.dp)
                 .shadow(
-                    elevation = if (MatteGlassTokens.isDark) 14.dp else 10.dp,
+                    elevation = if (MatteGlassTokens.isDark) 16.dp else 11.dp,
                     shape = capsuleShape,
-                    ambientColor = Color.Black.copy(alpha = 0.28f),
-                    spotColor = Color.Black.copy(alpha = 0.24f)
+                    ambientColor = Color.Black.copy(alpha = 0.30f),
+                    spotColor = Color.Black.copy(alpha = 0.26f)
                 )
                 .liquidGlassSurface(
                     hazeState = hazeState,
                     shape = capsuleShape,
                     tintColor = MatteGlassTokens.NavGlassBg,
                     fallbackColor = MatteGlassTokens.NavGlassFallback,
-                    blurRadius = 28.dp,
-                    borderWidth = 0.9.dp,
+                    blurRadius = 32.dp,
+                    borderWidth = 1.dp,
                     borderBrush = MatteGlassTokens.SpecularBorderBrush
                 )
-                .padding(horizontal = 6.dp, vertical = 5.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 6.dp, vertical = 5.dp)
         ) {
-            items.forEachIndexed { index, item ->
-                val selected = index == selectedIndex
-                val tint by animateColorAsState(
-                    targetValue = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted,
-                    animationSpec = tween(180),
-                    label = "navTint"
-                )
-                val pillBg by animateColorAsState(
-                    targetValue = if (selected) MatteGlassTokens.ActivePillBg else Color.Transparent,
-                    animationSpec = tween(180),
-                    label = "navPillBg"
-                )
-                val iconScale by animateFloatAsState(
-                    targetValue = if (selected) 1.07f else 0.96f,
-                    animationSpec = spring(dampingRatio = 0.58f, stiffness = 500f),
-                    label = "navScale"
-                )
+            val count = items.size.coerceAtLeast(1)
+            val tabWidth = maxWidth / count
+            val tabWidthPx = with(density) { tabWidth.toPx() }
+            val clampedPos = pagePosition.coerceIn(0f, (count - 1).toFloat())
+            val fractional = abs(clampedPos - clampedPos.roundToInt())
 
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .livelyPress(pressedScale = 0.92f, depthShiftPx = 1.5f) { onSelect(index) }
-                        .clip(activePillShape)
-                        .background(pillBg)
-                        .then(
-                            if (selected) {
-                                Modifier.border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, activePillShape)
-                            } else Modifier
-                        )
-                        .padding(vertical = 3.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
-                        contentDescription = item.label,
-                        tint = tint,
+            // GPU-driven Liquid Glass sliding pill with organic velocity stretch
+            Box(
+                modifier = Modifier
+                    .width(tabWidth)
+                    .fillMaxHeight()
+                    .graphicsLayer {
+                        translationX = clampedPos * tabWidthPx
+                        scaleX = 1f + fractional * 0.16f
+                        scaleY = 1f - fractional * 0.06f
+                    }
+                    .clip(activePillShape)
+                    .background(MatteGlassTokens.ActivePillBg)
+                    .border(0.95.dp, MatteGlassTokens.SpecularBorderBrush, activePillShape)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                items.forEachIndexed { index, item ->
+                    val selected = index == selectedIndex
+                    val tint by animateColorAsState(
+                        targetValue = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted,
+                        animationSpec = tween(160),
+                        label = "navTint"
+                    )
+                    val iconScale by animateFloatAsState(
+                        targetValue = if (selected) 1.09f else 0.95f,
+                        animationSpec = spring(dampingRatio = 0.52f, stiffness = 460f),
+                        label = "navScale"
+                    )
+
+                    Column(
                         modifier = Modifier
-                            .size(21.dp)
-                            .graphicsLayer {
-                                scaleX = iconScale
-                                scaleY = iconScale
-                            }
-                    )
-                    Spacer(Modifier.height(1.dp))
-                    Text(
-                        text = item.label,
-                        fontSize = 10.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = tint,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .livelyPress(pressedScale = 0.90f, depthShiftPx = 1.5f) { onSelect(index) }
+                            .padding(vertical = 3.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
+                            contentDescription = item.label,
+                            tint = tint,
+                            modifier = Modifier
+                                .size(21.dp)
+                                .graphicsLayer {
+                                    scaleX = iconScale
+                                    scaleY = iconScale
+                                }
+                        )
+                        Spacer(Modifier.height(1.dp))
+                        Text(
+                            text = item.label,
+                            fontSize = 10.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            color = tint,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -215,7 +233,7 @@ fun SimpleScreenHeader(
                 shape = RectangleShape,
                 tintColor = MatteGlassTokens.NavGlassBg,
                 fallbackColor = MatteGlassTokens.NavGlassFallback,
-                blurRadius = 26.dp,
+                blurRadius = 32.dp,
                 borderWidth = 0.dp,
                 borderBrush = null
             )
@@ -293,7 +311,7 @@ fun UnifiedMediaTopBar(
                 shape = RectangleShape,
                 tintColor = MatteGlassTokens.NavGlassBg,
                 fallbackColor = MatteGlassTokens.NavGlassFallback,
-                blurRadius = 26.dp,
+                blurRadius = 32.dp,
                 borderWidth = 0.dp,
                 borderBrush = null
             )
@@ -481,22 +499,23 @@ fun PosterMediaCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.964f else 1f,
-        animationSpec = spring(dampingRatio = 0.56f, stiffness = 520f),
+        targetValue = if (pressed) 0.956f else 1f,
+        animationSpec = spring(dampingRatio = 0.52f, stiffness = 420f),
         label = "cardScale"
     )
     val depthY by animateFloatAsState(
         targetValue = if (pressed) 4f else 0f,
-        animationSpec = spring(dampingRatio = 0.60f, stiffness = 520f),
+        animationSpec = spring(dampingRatio = 0.56f, stiffness = 420f),
         label = "cardDepth"
     )
     val pressGlintAlpha by animateFloatAsState(
-        targetValue = if (pressed) 0.14f else 0f,
-        animationSpec = tween(140),
+        targetValue = if (pressed) 0.16f else 0f,
+        animationSpec = tween(130),
         label = "cardGlint"
     )
 
@@ -523,8 +542,25 @@ fun PosterMediaCard(
     }
 
     val frameShape = RoundedCornerShape(6.dp)
-    val frameBg = if (MatteGlassTokens.isDark) Color(0x52182030) else Color(0xB8FFFFFF)
-    val frameBorder = if (MatteGlassTokens.isDark) Color.White.copy(alpha = 0.24f) else Color(0x3814161A)
+    val frameBg = if (MatteGlassTokens.isDark) Color(0x6B1C2638) else Color(0xEBFFFFFF)
+    val outerFrameBrush = if (MatteGlassTokens.isDark) {
+        Brush.linearGradient(
+            listOf(
+                Color.White.copy(alpha = 0.58f),
+                Color.White.copy(alpha = 0.24f),
+                Color.White.copy(alpha = 0.46f)
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(
+                Color(0x8C14161A),
+                Color(0x4D14161A),
+                Color(0x7A14161A)
+            )
+        )
+    }
+    val innerPosterRim = if (MatteGlassTokens.isDark) Color.White.copy(alpha = 0.28f) else Color(0x3D14161A)
 
     Box(
         modifier = modifier
@@ -532,10 +568,17 @@ fun PosterMediaCard(
                 scaleX = scale
                 scaleY = scale
                 translationY = depthY
+                cameraDistance = 12f * density.density
             }
+            .shadow(
+                elevation = if (MatteGlassTokens.isDark) 4.dp else 2.5.dp,
+                shape = frameShape,
+                ambientColor = Color.Black.copy(alpha = 0.24f),
+                spotColor = Color.Black.copy(alpha = 0.20f)
+            )
             .clip(frameShape)
             .background(frameBg)
-            .border(0.85.dp, frameBorder, frameShape)
+            .border(1.25.dp, outerFrameBrush, frameShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -548,100 +591,101 @@ fun PosterMediaCard(
                 .fillMaxSize()
                 .clip(CardShape)
                 .background(CardBgBrush)
+                .border(0.75.dp, innerPosterRim, CardShape)
         ) {
-        if (imageRequest != null) {
-            AsyncImage(
-                model = imageRequest,
-                contentDescription = item.name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-
-        // Bottom frosted readability scrim
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.56f)
-                .background(CardScrimBrush)
-        )
-
-        // Subtle tactile press glint
-        if (pressGlintAlpha > 0.001f) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(Color.White.copy(alpha = pressGlintAlpha))
-            )
-        }
-
-        Row(
-            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            CardGlassCircleIcon(
-                icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                contentDescription = "Favorite",
-                onClick = onFavoriteClick
-            )
-            CardGlassCircleIcon(
-                icon = Icons.Default.MoreHoriz,
-                contentDescription = "More options",
-                onClick = onMoreClick
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = item.name,
-                fontSize = if (isLarge) 17.sp else 14.sp,
-                lineHeight = if (isLarge) 21.sp else 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (item.group.isNotBlank()) {
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    text = item.group,
-                    fontSize = if (isLarge) 12.sp else 11.sp,
-                    color = Color.White.copy(alpha = 0.78f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            if (imageRequest != null) {
+                AsyncImage(
+                    model = imageRequest,
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
-            Spacer(Modifier.height(8.dp))
+
+            // Bottom readability scrim
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.56f)
+                    .background(CardScrimBrush)
+            )
+
+            // Tactile glass glint on press
+            if (pressGlintAlpha > 0.001f) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.White.copy(alpha = pressGlintAlpha))
+                )
+            }
+
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.align(Alignment.TopEnd).padding(7.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = badgeText,
-                    fontSize = if (isLarge) 12.sp else 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White.copy(alpha = 0.94f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                CardGlassCircleIcon(
+                    icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = "Favorite",
+                    onClick = onFavoriteClick
                 )
                 CardGlassCircleIcon(
-                    icon = Icons.Default.PlayArrow,
-                    contentDescription = "Play",
-                    onClick = onPlayClick
+                    icon = Icons.Default.MoreHoriz,
+                    contentDescription = "More options",
+                    onClick = onMoreClick
                 )
+            }
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(horizontal = 9.dp, vertical = 9.dp)
+            ) {
+                Text(
+                    text = item.name,
+                    fontSize = if (isLarge) 17.sp else 14.sp,
+                    lineHeight = if (isLarge) 21.sp else 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (item.group.isNotBlank()) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = item.group,
+                        fontSize = if (isLarge) 12.sp else 11.sp,
+                        color = Color.White.copy(alpha = 0.78f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.height(7.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = badgeText,
+                        fontSize = if (isLarge) 12.sp else 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White.copy(alpha = 0.94f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    CardGlassCircleIcon(
+                        icon = Icons.Default.PlayArrow,
+                        contentDescription = "Play",
+                        onClick = onPlayClick
+                    )
+                }
             }
         }
     }
-}
 }
 
 @Composable

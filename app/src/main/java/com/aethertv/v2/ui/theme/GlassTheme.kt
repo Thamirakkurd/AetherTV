@@ -175,7 +175,7 @@ fun matteGlassBorder(): BorderStroke = BorderStroke(
 
 fun liquidHazeStyle(
     tintColor: Color = MatteGlassTokens.NavGlassBg,
-    blurRadius: Dp = 26.dp,
+    blurRadius: Dp = 32.dp,
     noiseFactor: Float = 0.045f
 ): HazeStyle = HazeStyle(
     backgroundColor = MatteGlassTokens.CanvasWhite,
@@ -189,7 +189,7 @@ fun Modifier.liquidGlassSurface(
     shape: Shape = RectangleShape,
     tintColor: Color = MatteGlassTokens.NavGlassBg,
     fallbackColor: Color = MatteGlassTokens.NavGlassFallback,
-    blurRadius: Dp = 26.dp,
+    blurRadius: Dp = 32.dp,
     borderWidth: Dp = 0.85.dp,
     borderBrush: Brush? = MatteGlassTokens.SpecularBorderBrush
 ): Modifier {
@@ -219,12 +219,12 @@ fun Modifier.livelyPress(
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed && enabled) pressedScale else 1f,
-        animationSpec = spring(dampingRatio = 0.56f, stiffness = 540f),
+        animationSpec = spring(dampingRatio = 0.50f, stiffness = 420f),
         label = "livelyScale"
     )
     val translateY by animateFloatAsState(
         targetValue = if (pressed && enabled) depthShiftPx else 0f,
-        animationSpec = spring(dampingRatio = 0.62f, stiffness = 540f),
+        animationSpec = spring(dampingRatio = 0.56f, stiffness = 420f),
         label = "livelyDepth"
     )
     this

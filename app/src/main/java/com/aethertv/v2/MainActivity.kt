@@ -91,6 +91,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import kotlin.math.abs
 
 class MainActivity : ComponentActivity() {
     private val isInPipModeState = mutableStateOf(false)
@@ -966,7 +967,7 @@ private fun AetherV2App(
 
     val detailDepth by animateFloatAsState(
         targetValue = if (detailOpen) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.88f, stiffness = 380f),
+        animationSpec = spring(dampingRatio = 0.84f, stiffness = 310f),
         label = "detailDepth"
     )
     val playerDepth = if (activePlayerItem != null) playerExpandAnim.value.coerceIn(0f, 1f) else 0f
@@ -995,6 +996,19 @@ private fun AetherV2App(
                 userScrollEnabled = !detailOpen && (activePlayerItem == null || isPlayerMini),
                 modifier = Modifier.fillMaxSize()
             ) { page ->
+                val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                val absOffset = abs(pageOffset).coerceIn(0f, 1f)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val s = 1f - absOffset * 0.045f
+                            scaleX = s
+                            scaleY = s
+                            alpha = 1f - absOffset * 0.22f
+                            translationX = pageOffset * -28f
+                        }
+                ) {
                 when (page) {
                     0 -> {
                         val movieAndSeriesFavs = remember(favorites) {
@@ -1143,6 +1157,7 @@ private fun AetherV2App(
                         )
                     }
                 }
+                }
             }
 
             statusMessage?.let { msg ->
@@ -1166,17 +1181,25 @@ private fun AetherV2App(
 
             AnimatedVisibility(
                 visible = barsVisible && !detailOpen,
-                enter = slideInVertically(tween(220, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(180)),
-                exit = slideOutVertically(tween(200, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(160)),
+                enter = slideInVertically(spring(dampingRatio = 0.80f, stiffness = 360f)) { it } + fadeIn(tween(180)),
+                exit = slideOutVertically(spring(dampingRatio = 0.86f, stiffness = 400f)) { it } + fadeOut(tween(160)),
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
+                val livePagePos = (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+                    .coerceIn(0f, (tabs.size - 1).toFloat())
                 FloatingGlassNavBar(
                     items = tabs,
                     selectedIndex = selectedTab,
+                    pagePosition = livePagePos,
                     onSelect = { idx ->
                         selectedDetailItem = null
                         barsVisible = true
-                        scope.launch { pagerState.animateScrollToPage(idx) }
+                        scope.launch {
+                            pagerState.animateScrollToPage(
+                                page = idx,
+                                animationSpec = spring(dampingRatio = 0.84f, stiffness = 340f)
+                            )
+                        }
                     }
                 )
             }
@@ -1193,8 +1216,8 @@ private fun AetherV2App(
         // Slide-from-right spring animated Detail Screen overlay
         AnimatedVisibility(
             visible = detailOpen,
-            enter = slideInHorizontally(spring(dampingRatio = 0.88f, stiffness = 380f)) { it } + fadeIn(tween(180)),
-            exit = slideOutHorizontally(spring(dampingRatio = 0.90f, stiffness = 420f)) { it } + fadeOut(tween(160)),
+            enter = slideInHorizontally(spring(dampingRatio = 0.84f, stiffness = 310f)) { it } + fadeIn(tween(180)),
+            exit = slideOutHorizontally(spring(dampingRatio = 0.86f, stiffness = 360f)) { it } + fadeOut(tween(160)),
             modifier = Modifier.fillMaxSize()
         ) {
             val shownDetail = selectedDetailItem ?: lastRenderedDetailItem

@@ -150,8 +150,8 @@ fun HomeScreen(
                         }
                     } else {
                         LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            contentPadding = PaddingValues(horizontal = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             items(favoriteMedia, key = { it.id }, contentType = { "fav_card" }) { item ->
                                 val typeLabel = if (item.contentType == ContentType.SERIES) "Series" else "Movie"
@@ -216,8 +216,8 @@ fun HomeScreen(
                         )
                     } else {
                         LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            contentPadding = PaddingValues(horizontal = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             items(recentlyWatched, key = { "recent_${it.id}" }, contentType = { "recent_card" }) { item ->
                                 val thumbShape = RoundedCornerShape(4.dp)
@@ -238,10 +238,17 @@ fun HomeScreen(
                                             else onItemClick(item)
                                         }
                                 ) {
+                                    val recentFrameShape = RoundedCornerShape(6.dp)
+                                    val recentFrameBorder = if (MatteGlassTokens.isDark) Color.White.copy(alpha = 0.42f) else Color(0x6E14161A)
+                                    val recentFrameBg = if (MatteGlassTokens.isDark) Color(0x661C2638) else Color(0xE8FFFFFF)
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(172.dp)
+                                            .clip(recentFrameShape)
+                                            .background(recentFrameBg)
+                                            .border(1.15.dp, recentFrameBorder, recentFrameShape)
+                                            .padding(2.dp)
                                             .clip(thumbShape)
                                             .background(Color(0xFF1F2430))
                                     ) {

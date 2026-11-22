@@ -2,6 +2,7 @@ package com.aethertv.v2.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -93,12 +94,12 @@ fun LiveTvScreen(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 12.dp,
-                        end = 12.dp,
+                        start = 8.dp,
+                        end = 8.dp,
                         top = topInset + 64.dp,
                         bottom = navInset + 86.dp + extraBottomPadding
                     ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(items, key = { it.id }, contentType = { "live_channel" }) { channel ->
                         val isFav = favoriteIds.contains(channel.id)
@@ -130,7 +131,7 @@ fun LiveTvScreen(
                                 }
                                 .clip(ChannelRowShape)
                                 .background(MatteGlassTokens.CardGlassBg)
-                                .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, ChannelRowShape)
+                                .border(1.1.dp, MatteGlassTokens.SpecularBorderBrush, ChannelRowShape)
                                 .padding(start = 10.dp, end = 4.dp, top = 9.dp, bottom = 9.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -230,8 +231,8 @@ fun LiveTvScreen(
 
         AnimatedVisibility(
             visible = topBarVisible,
-            enter = slideInVertically(tween(220, easing = FastOutSlowInEasing)) { -it } + fadeIn(tween(180)),
-            exit = slideOutVertically(tween(200, easing = FastOutSlowInEasing)) { -it } + fadeOut(tween(160)),
+            enter = slideInVertically(spring(dampingRatio = 0.82f, stiffness = 360f)) { -it } + fadeIn(tween(180)),
+            exit = slideOutVertically(spring(dampingRatio = 0.86f, stiffness = 400f)) { -it } + fadeOut(tween(160)),
             modifier = Modifier.align(Alignment.TopCenter)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
