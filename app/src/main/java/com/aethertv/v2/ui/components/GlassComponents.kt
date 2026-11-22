@@ -9,7 +9,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -46,11 +49,10 @@ fun GlassTopHeader(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Screen title inside flat matte frosted pill (zero shadow)
         Surface(
             shape = CircleShape,
             color = MatteGlassTokens.HeaderPillBg,
@@ -66,7 +68,6 @@ fun GlassTopHeader(
             )
         }
 
-        // Circular matte frosted action buttons (zero shadow)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GlassCircleActionButton(icon = Icons.Default.Search, contentDescription = "Search", onClick = onSearchClick)
             GlassCircleActionButton(icon = Icons.Default.Tune, contentDescription = "Filter", onClick = onFilterClick)
@@ -173,54 +174,89 @@ fun FloatingGlassNavBar(
 @Composable
 fun GlassMediaCard(
     title: String,
+    subtitle: String,
     badgeText: String,
     showLiveDot: Boolean,
     toneIndex: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(18.dp)
-    // Neutral monochrome placeholder backdrops for Milestone 1 preview
+    val shape = RoundedCornerShape(4.dp)
     val placeholderBrush = when (toneIndex % 4) {
-        0 -> Brush.verticalGradient(listOf(Color(0xFFE4E4E7), Color(0xFFA1A1AA)))
-        1 -> Brush.verticalGradient(listOf(Color(0xFFD4D4D8), Color(0xFF71717A)))
-        2 -> Brush.verticalGradient(listOf(Color(0xFFECECEE), Color(0xFF9F9FA9)))
-        else -> Brush.verticalGradient(listOf(Color(0xFFDFDFE2), Color(0xFF8A8A93)))
+        0 -> Brush.verticalGradient(listOf(Color(0xFFD4D4D8), Color(0xFF52525B), Color(0xFF18181B)))
+        1 -> Brush.verticalGradient(listOf(Color(0xFFC4C4CA), Color(0xFF3F3F46), Color(0xFF18181B)))
+        2 -> Brush.verticalGradient(listOf(Color(0xFFE4E4E7), Color(0xFF71717A), Color(0xFF27272A)))
+        else -> Brush.verticalGradient(listOf(Color(0xFFD6D3D1), Color(0xFF57534E), Color(0xFF1C1917)))
     }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(0.74f)
+            .aspectRatio(0.58f)
             .clip(shape)
             .background(placeholderBrush)
             .border(1.dp, MatteGlassTokens.NeutralBorder, shape)
             .clickable(onClick = onClick)
     ) {
-        // Faint 1dp inner glass edge highlight
+        // Subtle 1dp inner white glass frame
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .padding(1.dp)
-                .border(1.dp, MatteGlassTokens.CardInnerEdge, RoundedCornerShape(17.dp))
+                .border(1.dp, MatteGlassTokens.CardInnerEdge, RoundedCornerShape(3.dp))
         )
 
-        // Top-left matte frosted badge + optional red dot
+        // Top-right translucent circular action icons (reference style)
         Row(
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .align(Alignment.TopEnd)
+                .padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Surface(
-                shape = CircleShape,
-                color = MatteGlassTokens.BadgeBg,
-                border = BorderStroke(1.dp, MatteGlassTokens.NeutralBorder),
-                shadowElevation = 0.dp
+            CardTopCircleIcon(icon = Icons.Default.StarBorder, contentDescription = "Favorite")
+            CardTopCircleIcon(icon = Icons.Default.MoreHoriz, contentDescription = "More")
+        }
+
+        // Bottom smooth dark scrim + title, subtitle, and metadata row
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0x9918181B),
+                            Color(0xE618181B)
+                        )
+                    )
+                )
+                .padding(start = 10.dp, end = 10.dp, top = 28.dp, bottom = 10.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = subtitle,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                color = Color.White.copy(alpha = 0.80f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
@@ -236,28 +272,48 @@ fun GlassMediaCard(
                         text = badgeText,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MatteGlassTokens.CharcoalPrimary
+                        color = Color.White.copy(alpha = 0.90f)
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.16f))
+                        .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }
         }
+    }
+}
 
-        // Bottom-aligned dark translucent frosted title strip
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .background(MatteGlassTokens.CardTitleOverlay)
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = title,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+@Composable
+private fun CardTopCircleIcon(
+    icon: ImageVector,
+    contentDescription: String
+) {
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .background(Color(0x5218181B))
+            .border(1.dp, Color.White.copy(alpha = 0.30f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(15.dp)
+        )
     }
 }

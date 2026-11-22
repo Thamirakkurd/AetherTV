@@ -58,7 +58,7 @@ private fun AetherV2Shell() {
 
     val demoItems = remember(selectedTab) {
         val prefix = tabs[selectedTab].label
-        (1..12).map { index -> "$prefix Item $index" }
+        (1..12).map { index -> "$prefix $index" }
     }
 
     Box(
@@ -76,15 +76,16 @@ private fun AetherV2Shell() {
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 112.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 104.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 itemsIndexed(demoItems) { idx, title ->
                     GlassMediaCard(
                         title = title,
-                        badgeText = if (selectedTab == 1) "LIVE" else "4K",
+                        subtitle = if (selectedTab == 1) "HD Stream • Sports & Entertainment" else "2026 • Action / Drama",
+                        badgeText = if (selectedTab == 1) "LIVE" else "4K UHD",
                         showLiveDot = selectedTab == 1,
                         toneIndex = idx,
                         onClick = {}
