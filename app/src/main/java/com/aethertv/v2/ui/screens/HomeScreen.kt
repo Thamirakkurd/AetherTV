@@ -38,12 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -65,44 +60,13 @@ import com.aethertv.v2.ui.components.LocalGridSpringPhysics
 import com.aethertv.v2.ui.components.PosterMediaCard
 import com.aethertv.v2.ui.components.SimpleScreenHeader
 import com.aethertv.v2.ui.components.rememberGridSpringPhysicsState
+import com.aethertv.v2.ui.components.tripleHairlinePortraitFrame
 import com.aethertv.v2.ui.theme.LiquidGlassTokens
 import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 import com.aethertv.v2.ui.theme.livelyPress
 import dev.chrisbanes.haze.hazeSource
 
-private fun Modifier.recentTripleHairlineFrame(
-    isDark: Boolean,
-    isActive: Boolean
-): Modifier = this.drawWithCache {
-    val strokePx = LiquidGlassTokens.FrameLineThickness.toPx().coerceAtLeast(1f)
-    val gapPx = LiquidGlassTokens.FrameLineGap.toPx()
-    val outerRadiusPx = LiquidGlassTokens.FrameOuterCornerRadius.toPx()
-    val radiusStepPx = 0.5.dp.toPx()
-    val stroke = Stroke(width = strokePx)
-    val boost = if (isActive) 1.75f else 1f
-    val baseColor = if (isDark) Color.White else Color(0xFF14161A)
-    val ringColors = listOf(
-        baseColor.copy(alpha = (0.12f * boost).coerceAtMost(0.42f)),
-        baseColor.copy(alpha = (0.19f * boost).coerceAtMost(0.56f)),
-        baseColor.copy(alpha = (0.28f * boost).coerceAtMost(0.72f))
-    )
-
-    onDrawWithContent {
-        drawContent()
-        for (ring in 0 until 3) {
-            val inset = ring * (strokePx + gapPx) + (strokePx / 2f)
-            val radius = (outerRadiusPx - (ring * radiusStepPx)).coerceAtLeast(1.5f)
-            drawRoundRect(
-                color = ringColors[ring],
-                topLeft = Offset(inset, inset),
-                size = Size(size.width - inset * 2f, size.height - inset * 2f),
-                cornerRadius = CornerRadius(radius, radius),
-                style = stroke
-            )
-        }
-    }
-}
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -373,7 +337,7 @@ fun HomeScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .height(172.dp)
-                                                .recentTripleHairlineFrame(isDark = isDark, isActive = pressed)
+                                                .tripleHairlinePortraitFrame(isDark = isDark, isActive = pressed)
                                                 .padding(LiquidGlassTokens.CardFrameInset)
                                                 .clip(thumbShape)
                                                 .background(LiquidGlassTokens.GlassFillDark)

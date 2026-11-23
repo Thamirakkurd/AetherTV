@@ -494,7 +494,7 @@ fun UnifiedMediaTopBar(
 /**
  * Tight, razor-sharp 3-line hairline portrait frame (4.5dp -> 4.0dp -> 3.5dp concentric with 3.0dp poster).
  */
-private fun Modifier.tripleHairlinePortraitFrame(
+fun Modifier.tripleHairlinePortraitFrame(
     isDark: Boolean,
     isActive: Boolean
 ): Modifier = this.drawWithCache {
