@@ -8,10 +8,9 @@ import androidx.compose.ui.unit.dp
 
 object LiquidGlassTokens {
     // --- Global Icon Scale ---
-    val AppWideIconSize = 27.dp
-    val HeaderActionTouchTarget = 48.dp
-    // STRICT GUARD: Never alter the 3 overlay icons on media cards
-    val MediaCardOverlayIconSize = 14.dp
+    val AppWideIconSize = 26.dp
+    val HeaderActionTouchTarget = 46.dp
+    val MediaCardOverlayIconSize = 18.dp
 
     // --- Edge-to-Edge Grid Spacing ---
     val GridHorizontalEdgePadding = 1.dp
@@ -25,27 +24,27 @@ object LiquidGlassTokens {
     val CardFrameInset = 2.2.dp
 
     // --- Top Header ---
-    val TopHeaderHeight = 76.dp
+    val TopHeaderHeight = 62.dp
 
-    // --- Liquid Glass Palette ---
+    // --- Clean Glass Palette ---
     val GlassFillDark = Color(0xFF0E131D).copy(alpha = 0.24f)
     val GlassFillElevated = Color(0xFF182233).copy(alpha = 0.34f)
     val GlassDivider = Color.White.copy(alpha = 0.08f)
 
     val SpecularRimBrush = Brush.linearGradient(
         colors = listOf(
-            Color.White.copy(alpha = 0.28f),
+            Color.White.copy(alpha = 0.26f),
             Color.White.copy(alpha = 0.08f),
-            Color.White.copy(alpha = 0.03f),
-            Color.White.copy(alpha = 0.16f)
+            Color.White.copy(alpha = 0.04f),
+            Color.White.copy(alpha = 0.14f)
         )
     )
 
+    // Clean top sheen with zero dark bottom shadow
     val InnerGlowBrush = Brush.verticalGradient(
         colors = listOf(
-            Color.White.copy(alpha = 0.12f),
-            Color.Transparent,
-            Color.Black.copy(alpha = 0.18f)
+            Color.White.copy(alpha = 0.08f),
+            Color.Transparent
         )
     )
 

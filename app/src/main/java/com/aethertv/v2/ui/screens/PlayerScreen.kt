@@ -1368,9 +1368,7 @@ fun UnifiedMorphPlayerOverlay(
                             .size(56.dp)
                             .livelyPress(pressedScale = 0.88f) {
                                 if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
-                            }
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.34f)),
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -1789,9 +1787,7 @@ private fun LiveFeedBelowPlayer(
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
-                                .clip(CircleShape)
-                                .background(MatteGlassTokens.CardGlassBg)
-                                .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape),
+                                .clip(RoundedCornerShape(6.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             if (!channel.posterUrl.isNullOrBlank()) {
@@ -1913,14 +1909,10 @@ private fun LiveFeedBelowPlayer(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(MatteGlassTokens.FieldGlassBg)
-                    .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape),
+                modifier = Modifier.size(34.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Category, "Categories", tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Category, "Categories", tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(24.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -2609,17 +2601,13 @@ private fun YouTubeActionPill(
     label: String,
     onClick: () -> Unit
 ) {
-    val pillBg = if (MatteGlassTokens.isDark) MatteGlassTokens.FieldGlassBg else Color(0xE8FFFFFF)
     Row(
         modifier = Modifier
             .livelyPress(pressedScale = 0.93f, onClick = onClick)
-            .clip(CircleShape)
-            .background(pillBg)
-            .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, label, tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(15.dp))
+        Icon(icon, label, tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(5.dp))
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MatteGlassTokens.CharcoalPrimary)
     }
@@ -2696,9 +2684,7 @@ private fun YouTubeChannelFeedCard(
             Box(
                 modifier = Modifier
                     .size(38.dp)
-                    .clip(CircleShape)
-                    .background(MatteGlassTokens.CardGlassBg)
-                    .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape),
+                    .clip(RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 if (logoReq != null) {

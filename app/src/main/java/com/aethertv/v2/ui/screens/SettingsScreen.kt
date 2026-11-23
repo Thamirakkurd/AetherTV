@@ -8,12 +8,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AddCircleOutline
-import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DeleteSweep
@@ -23,7 +22,7 @@ import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.OpenInNew
-import androidx.compose.material.icons.rounded.PlayCircleOutline
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.HorizontalDivider
@@ -38,7 +37,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -94,62 +92,53 @@ fun SettingsScreen(
             contentPadding = PaddingValues(
                 start = 12.dp,
                 end = 12.dp,
-                top = topInset + 82.dp,
-                bottom = navInset + 96.dp + extraBottomPadding
+                top = topInset + 72.dp,
+                bottom = navInset + 84.dp + extraBottomPadding
             ),
             verticalArrangement = Arrangement.spacedBy(22.dp)
         ) {
             // 1. Appearance
             item(key = "theme_section") {
                 SettingsGlassGroup(title = "APPEARANCE") {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        AppThemeMode.entries.forEach { mode ->
-                            val selected = mode == themeMode
-                            val icon = if (mode == AppThemeMode.DARK) Icons.Rounded.DarkMode else Icons.Rounded.LightMode
-                            val label = if (mode == AppThemeMode.DARK) "Dark Glass" else "Light Glass"
+                    AppThemeMode.entries.forEachIndexed { index, mode ->
+                        val selected = mode == themeMode
+                        val icon = if (mode == AppThemeMode.DARK) Icons.Rounded.DarkMode else Icons.Rounded.LightMode
+                        val label = if (mode == AppThemeMode.DARK) "Dark Glass" else "Light Glass"
 
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(50.dp)
-                                    .livelyPress(pressedScale = 0.96f, depthShiftPx = 2f) {
-                                        onChangeThemeMode(mode)
-                                    }
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(
-                                        if (selected) MatteGlassTokens.CharcoalPrimary
-                                        else MatteGlassTokens.SubtleSurface
-                                    )
-                                    .border(
-                                        0.85.dp,
-                                        if (selected) SolidColor(MatteGlassTokens.CharcoalPrimary)
-                                        else MatteGlassTokens.SpecularBorderBrush,
-                                        RoundedCornerShape(14.dp)
-                                    )
-                                    .padding(horizontal = 12.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .livelyPress(pressedScale = 0.985f, depthShiftPx = 1.5f) {
+                                    onChangeThemeMode(mode)
+                                }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = MatteGlassTokens.CharcoalPrimary,
+                                modifier = Modifier.size(25.dp)
+                            )
+                            Spacer(Modifier.width(16.dp))
+                            Text(
+                                text = label,
+                                fontSize = 15.5.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = MatteGlassTokens.CharcoalPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (selected) {
                                 Icon(
-                                    imageVector = icon,
-                                    contentDescription = label,
-                                    tint = if (selected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = "Selected",
+                                    tint = MatteGlassTokens.CharcoalPrimary,
                                     modifier = Modifier.size(23.dp)
                                 )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = label,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (selected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
-                                    maxLines = 1
-                                )
                             }
+                        }
+                        if (index < AppThemeMode.entries.lastIndex) {
+                            SettingsRowDivider()
                         }
                     }
                 }
@@ -175,26 +164,24 @@ fun SettingsScreen(
                                     .livelyPress(pressedScale = 0.985f, depthShiftPx = 1.5f) {
                                         onSelectServer(srv)
                                     }
-                                    .background(
-                                        if (isActive) MatteGlassTokens.FieldGlassBg.copy(alpha = 0.45f)
-                                        else Color.Transparent
-                                    )
-                                    .padding(horizontal = 14.dp, vertical = 13.dp),
+                                    .padding(horizontal = 16.dp, vertical = 13.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                SettingsIconBadge(
-                                    icon = Icons.Rounded.Dns,
-                                    highlighted = isActive
+                                Icon(
+                                    imageVector = Icons.Rounded.Dns,
+                                    contentDescription = null,
+                                    tint = MatteGlassTokens.CharcoalPrimary,
+                                    modifier = Modifier.size(25.dp)
                                 )
-                                Spacer(Modifier.width(14.dp))
+                                Spacer(Modifier.width(16.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Text(
                                             text = serverTitle,
-                                            fontSize = 15.sp,
+                                            fontSize = 15.5.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MatteGlassTokens.CharcoalPrimary,
                                             maxLines = 1,
@@ -203,14 +190,9 @@ fun SettingsScreen(
                                         )
                                         Text(
                                             text = srv.mode.uppercase(),
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MatteGlassTokens.CharcoalMuted,
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(MatteGlassTokens.SubtleSurface)
-                                                .border(0.6.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(6.dp))
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MatteGlassTokens.CharcoalMuted
                                         )
                                     }
                                     if (endpoint.isNotBlank()) {
@@ -226,7 +208,7 @@ fun SettingsScreen(
                                 }
                                 if (isActive) {
                                     Icon(
-                                        imageVector = Icons.Rounded.CheckCircle,
+                                        imageVector = Icons.Rounded.Check,
                                         contentDescription = "Active",
                                         tint = MatteGlassTokens.CharcoalPrimary,
                                         modifier = Modifier
@@ -236,7 +218,7 @@ fun SettingsScreen(
                                 }
                                 IconButton(
                                     onClick = { onDeleteServer(srv) },
-                                    modifier = Modifier.size(42.dp)
+                                    modifier = Modifier.size(40.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.DeleteOutline,
@@ -281,34 +263,29 @@ fun SettingsScreen(
                                 .livelyPress(pressedScale = 0.985f, depthShiftPx = 1.5f) {
                                     onChangeDownloadMode(mode)
                                 }
-                                .padding(horizontal = 14.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            SettingsIconBadge(
-                                icon = Icons.Rounded.Download,
-                                highlighted = selected
+                            Icon(
+                                imageVector = Icons.Rounded.Download,
+                                contentDescription = null,
+                                tint = MatteGlassTokens.CharcoalPrimary,
+                                modifier = Modifier.size(25.dp)
                             )
-                            Spacer(Modifier.width(14.dp))
+                            Spacer(Modifier.width(16.dp))
                             Text(
                                 text = mode.label,
-                                fontSize = 15.sp,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                fontSize = 15.5.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                                 color = MatteGlassTokens.CharcoalPrimary,
                                 modifier = Modifier.weight(1f)
                             )
                             if (selected) {
                                 Icon(
-                                    imageVector = Icons.Rounded.CheckCircle,
+                                    imageVector = Icons.Rounded.Check,
                                     contentDescription = "Selected",
                                     tint = MatteGlassTokens.CharcoalPrimary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .clip(CircleShape)
-                                        .border(1.25.dp, MatteGlassTokens.HairlineDivider, CircleShape)
+                                    modifier = Modifier.size(23.dp)
                                 )
                             }
                         }
@@ -335,15 +312,20 @@ fun SettingsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+                                    .padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                SettingsIconBadge(icon = Icons.Rounded.FolderOpen)
-                                Spacer(Modifier.width(14.dp))
+                                Icon(
+                                    imageVector = Icons.Rounded.FolderOpen,
+                                    contentDescription = null,
+                                    tint = MatteGlassTokens.CharcoalPrimary,
+                                    modifier = Modifier.size(25.dp)
+                                )
+                                Spacer(Modifier.width(16.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = file.nameWithoutExtension,
-                                        fontSize = 14.5.sp,
+                                        fontSize = 15.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MatteGlassTokens.CharcoalPrimary,
                                         maxLines = 1,
@@ -357,10 +339,10 @@ fun SettingsScreen(
                                 }
                                 IconButton(
                                     onClick = { onPlayDownloadedFile(file) },
-                                    modifier = Modifier.size(44.dp)
+                                    modifier = Modifier.size(42.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Rounded.PlayCircleOutline,
+                                        imageVector = Icons.Rounded.PlayArrow,
                                         contentDescription = "Play file",
                                         tint = MatteGlassTokens.CharcoalPrimary,
                                         modifier = Modifier.size(26.dp)
@@ -368,7 +350,7 @@ fun SettingsScreen(
                                 }
                                 IconButton(
                                     onClick = { onDeleteDownloadedFile(file) },
-                                    modifier = Modifier.size(44.dp)
+                                    modifier = Modifier.size(42.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.DeleteOutline,
@@ -392,22 +374,27 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        SettingsIconBadge(icon = Icons.Rounded.Star)
-                        Spacer(Modifier.width(14.dp))
+                        Icon(
+                            imageVector = Icons.Rounded.Star,
+                            contentDescription = null,
+                            tint = MatteGlassTokens.CharcoalPrimary,
+                            modifier = Modifier.size(25.dp)
+                        )
+                        Spacer(Modifier.width(16.dp))
                         Text(
                             text = "Pinned Favorites",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.Normal,
                             color = MatteGlassTokens.CharcoalPrimary,
                             modifier = Modifier.weight(1f)
                         )
                         Text(
                             text = favoritesCount.toString(),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.SemiBold,
                             color = MatteGlassTokens.CharcoalPrimary
                         )
                     }
@@ -415,22 +402,27 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        SettingsIconBadge(icon = Icons.Rounded.History)
-                        Spacer(Modifier.width(14.dp))
+                        Icon(
+                            imageVector = Icons.Rounded.History,
+                            contentDescription = null,
+                            tint = MatteGlassTokens.CharcoalPrimary,
+                            modifier = Modifier.size(25.dp)
+                        )
+                        Spacer(Modifier.width(16.dp))
                         Text(
                             text = "Recently Watched",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.Normal,
                             color = MatteGlassTokens.CharcoalPrimary,
                             modifier = Modifier.weight(1f)
                         )
                         Text(
                             text = recentCount.toString(),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.SemiBold,
                             color = MatteGlassTokens.CharcoalPrimary
                         )
                     }
@@ -439,39 +431,26 @@ fun SettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .livelyPress(pressedScale = 0.985f, depthShiftPx = 1.5f, onClick = onClearAll)
-                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(11.dp))
-                                .background(MatteGlassTokens.NotificationDot.copy(alpha = 0.14f))
-                                .border(
-                                    0.75.dp,
-                                    MatteGlassTokens.NotificationDot.copy(alpha = 0.35f),
-                                    RoundedCornerShape(11.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.DeleteSweep,
-                                contentDescription = "Clear All Data",
-                                tint = MatteGlassTokens.NotificationDot,
-                                modifier = Modifier.size(23.dp)
-                            )
-                        }
-                        Spacer(Modifier.width(14.dp))
+                        Icon(
+                            imageVector = Icons.Rounded.DeleteSweep,
+                            contentDescription = "Clear All Data",
+                            tint = MatteGlassTokens.NotificationDot,
+                            modifier = Modifier.size(25.dp)
+                        )
+                        Spacer(Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Clear All Saved Data",
-                                fontSize = 15.sp,
+                                fontSize = 15.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MatteGlassTokens.NotificationDot
                             )
                             Text(
                                 text = "Removes playlists, cache, favorites, and history",
-                                fontSize = 12.sp,
+                                fontSize = 12.5.sp,
                                 color = MatteGlassTokens.CharcoalMuted
                             )
                         }
@@ -489,10 +468,10 @@ fun SettingsScreen(
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Thamirakkurd"))
                                 context.startActivity(intent)
                             }
-                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        ThamerAkLogo(modifier = Modifier.size(52.dp))
+                        ThamerAkLogo(modifier = Modifier.size(48.dp))
                         Spacer(Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -503,7 +482,7 @@ fun SettingsScreen(
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                text = "AetherTV v3.4.0 • github.com/Thamirakkurd",
+                                text = "AetherTV v3.4.2 • github.com/Thamirakkurd",
                                 fontSize = 12.5.sp,
                                 color = MatteGlassTokens.CharcoalMuted,
                                 maxLines = 1,
@@ -539,48 +518,17 @@ private fun SettingsGlassGroup(
             text = title,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            letterSpacing = 1.1.sp,
+            letterSpacing = 1.0.sp,
             color = MatteGlassTokens.CharcoalMuted,
             modifier = Modifier.padding(start = 10.dp)
         )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(MatteGlassTokens.CardGlassBg)
-                .background(MatteGlassTokens.InnerGlowBrush)
-                .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(20.dp)),
+                .border(0.6.dp, MatteGlassTokens.HairlineDivider, RoundedCornerShape(16.dp)),
             content = content
-        )
-    }
-}
-
-@Composable
-private fun SettingsIconBadge(
-    icon: ImageVector,
-    highlighted: Boolean = false
-) {
-    Box(
-        modifier = Modifier
-            .size(38.dp)
-            .clip(RoundedCornerShape(11.dp))
-            .background(
-                if (highlighted) MatteGlassTokens.CharcoalPrimary
-                else MatteGlassTokens.SubtleSurface
-            )
-            .border(
-                0.75.dp,
-                if (highlighted) SolidColor(MatteGlassTokens.CharcoalPrimary)
-                else MatteGlassTokens.SpecularBorderBrush,
-                RoundedCornerShape(11.dp)
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (highlighted) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
-            modifier = Modifier.size(23.dp)
         )
     }
 }
@@ -596,16 +544,21 @@ private fun SettingsActionRow(
         modifier = Modifier
             .fillMaxWidth()
             .livelyPress(pressedScale = 0.985f, depthShiftPx = 1.5f, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        SettingsIconBadge(icon = icon)
-        Spacer(Modifier.width(14.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MatteGlassTokens.CharcoalPrimary,
+            modifier = Modifier.size(25.dp)
+        )
+        Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
+                fontSize = 15.5.sp,
+                fontWeight = FontWeight.Normal,
                 color = MatteGlassTokens.CharcoalPrimary
             )
             Text(
@@ -631,11 +584,16 @@ private fun SettingsEmptyRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        SettingsIconBadge(icon = icon)
-        Spacer(Modifier.width(14.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MatteGlassTokens.CharcoalMuted,
+            modifier = Modifier.size(25.dp)
+        )
+        Spacer(Modifier.width(16.dp))
         Text(
             text = message,
             fontSize = 13.5.sp,
@@ -649,7 +607,7 @@ private fun SettingsEmptyRow(
 @Composable
 private fun SettingsRowDivider(fullWidth: Boolean = false) {
     HorizontalDivider(
-        modifier = Modifier.padding(start = if (fullWidth) 0.dp else 66.dp, end = if (fullWidth) 0.dp else 14.dp),
+        modifier = Modifier.padding(start = if (fullWidth) 0.dp else 57.dp, end = if (fullWidth) 0.dp else 16.dp),
         thickness = 0.5.dp,
         color = MatteGlassTokens.HairlineDivider
     )

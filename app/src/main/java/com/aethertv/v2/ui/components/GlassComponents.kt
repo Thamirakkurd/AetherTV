@@ -5,7 +5,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,7 +12,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -36,7 +34,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -76,16 +73,22 @@ data class NavTabItem(
     val unselectedIcon: ImageVector = selectedIcon
 )
 
-private val NavFieldShape = RoundedCornerShape(22.dp)
+private val SearchFieldShape = RoundedCornerShape(20.dp)
 private val CardInnerShape = RoundedCornerShape(LiquidGlassTokens.CardCornerRadius)
 private val CardGlassTintBrush = Brush.verticalGradient(
     listOf(Color(0x331E2636), Color(0x550B0E15))
 )
+private val CardTopScrimBrush = Brush.verticalGradient(
+    colors = listOf(Color(0x88000000), Color.Transparent)
+)
 private val CardScrimBrush = Brush.verticalGradient(
     colors = listOf(Color.Transparent, Color(0x88090B10), Color(0xEB07090D))
 )
-private val CardIconBorder = BorderStroke(0.9.dp, Color.White.copy(alpha = 0.36f))
 
+/**
+ * Clean, bright full-width frosted bottom bar matching the minimal Apple/iOS style:
+ * pure icons + subtle labels, hairline top border, zero circles or heavy beveled pills.
+ */
 @Composable
 fun FloatingGlassNavBar(
     items: List<NavTabItem>,
@@ -96,37 +99,27 @@ fun FloatingGlassNavBar(
 ) {
     val hazeState = LocalHazeState.current
     val density = LocalDensity.current
-    val capsuleShape = RoundedCornerShape(34.dp)
-    val activePillShape = RoundedCornerShape(26.dp)
 
-    Box(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center
+            .liquidGlassSurface(
+                hazeState = hazeState,
+                shape = RectangleShape,
+                tintColor = MatteGlassTokens.NavGlassBg,
+                fallbackColor = MatteGlassTokens.NavGlassFallback,
+                blurRadius = 28.dp,
+                borderWidth = 0.dp,
+                borderBrush = null
+            )
     ) {
+        HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
+
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(68.dp)
-                .shadow(
-                    elevation = if (MatteGlassTokens.isDark) 18.dp else 12.dp,
-                    shape = capsuleShape,
-                    ambientColor = Color.Black.copy(alpha = 0.32f),
-                    spotColor = Color.Black.copy(alpha = 0.28f)
-                )
-                .liquidGlassSurface(
-                    hazeState = hazeState,
-                    shape = capsuleShape,
-                    tintColor = MatteGlassTokens.NavGlassBg,
-                    fallbackColor = MatteGlassTokens.NavGlassFallback,
-                    blurRadius = 34.dp,
-                    borderWidth = 1.dp,
-                    borderBrush = MatteGlassTokens.SpecularBorderBrush
-                )
-                .background(LiquidGlassTokens.InnerGlowBrush)
-                .padding(horizontal = 6.dp, vertical = 5.dp)
+                .navigationBarsPadding()
+                .height(60.dp)
         ) {
             val count = items.size.coerceAtLeast(1)
             val tabWidth = maxWidth / count
@@ -134,20 +127,25 @@ fun FloatingGlassNavBar(
             val clampedPos = pagePosition.coerceIn(0f, (count - 1).toFloat())
             val fractional = abs(clampedPos - clampedPos.roundToInt())
 
+            // Crisp minimal top sliding indicator driven on GPU
             Box(
                 modifier = Modifier
                     .width(tabWidth)
-                    .fillMaxHeight()
+                    .align(Alignment.TopStart)
                     .graphicsLayer {
                         translationX = clampedPos * tabWidthPx
-                        scaleX = 1f + fractional * 0.16f
-                        scaleY = 1f - fractional * 0.06f
-                    }
-                    .clip(activePillShape)
-                    .background(MatteGlassTokens.ActivePillBg)
-                    .background(LiquidGlassTokens.InnerGlowBrush)
-                    .border(0.95.dp, MatteGlassTokens.SpecularBorderBrush, activePillShape)
-            )
+                        scaleX = 1f + fractional * 0.25f
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(28.dp)
+                        .height(2.5.dp)
+                        .clip(RoundedCornerShape(bottomStart = 2.dp, bottomEnd = 2.dp))
+                        .background(MatteGlassTokens.CharcoalPrimary)
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxSize(),
@@ -158,12 +156,12 @@ fun FloatingGlassNavBar(
                     val selected = index == selectedIndex
                     val tint by animateColorAsState(
                         targetValue = if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CharcoalMuted,
-                        animationSpec = tween(160),
+                        animationSpec = tween(150),
                         label = "navTint"
                     )
                     val iconScale by animateFloatAsState(
-                        targetValue = if (selected) 1.10f else 0.96f,
-                        animationSpec = spring(dampingRatio = 0.55f, stiffness = 440f),
+                        targetValue = if (selected) 1.08f else 0.96f,
+                        animationSpec = spring(dampingRatio = 0.56f, stiffness = 460f),
                         label = "navScale"
                     )
 
@@ -171,8 +169,8 @@ fun FloatingGlassNavBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .livelyPress(pressedScale = 0.90f, depthShiftPx = 1.5f) { onSelect(index) }
-                            .padding(vertical = 3.dp),
+                            .livelyPress(pressedScale = 0.88f, depthShiftPx = 1.5f) { onSelect(index) }
+                            .padding(top = 4.dp, bottom = 2.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
@@ -181,7 +179,7 @@ fun FloatingGlassNavBar(
                             contentDescription = item.label,
                             tint = tint,
                             modifier = Modifier
-                                .size(26.dp)
+                                .size(25.dp)
                                 .graphicsLayer {
                                     scaleX = iconScale
                                     scaleY = iconScale
@@ -190,8 +188,8 @@ fun FloatingGlassNavBar(
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = item.label,
-                            fontSize = 11.sp,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 10.5.sp,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                             color = tint,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -203,6 +201,9 @@ fun FloatingGlassNavBar(
     }
 }
 
+/**
+ * Pure icon action button — circle background & border completely removed.
+ */
 @Composable
 fun GlassCircleActionButton(
     icon: ImageVector,
@@ -210,24 +211,17 @@ fun GlassCircleActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (MatteGlassTokens.isDark) Color(0x52121824) else Color(0x99FFFFFF)
-    val rim = if (MatteGlassTokens.isDark) Color.White.copy(alpha = 0.30f) else MatteGlassTokens.GlassNavBorder
-
     Box(
         modifier = modifier
-            .size(48.dp)
-            .livelyPress(pressedScale = 0.91f, depthShiftPx = 2f, onClick = onClick)
-            .clip(CircleShape)
-            .background(bg)
-            .background(LiquidGlassTokens.InnerGlowBrush)
-            .border(BorderStroke(0.9.dp, rim), CircleShape),
+            .size(44.dp)
+            .livelyPress(pressedScale = 0.88f, depthShiftPx = 1.5f, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = MatteGlassTokens.CharcoalPrimary,
-            modifier = Modifier.size(25.dp)
+            modifier = Modifier.size(26.dp)
         )
     }
 }
@@ -248,52 +242,51 @@ fun SimpleScreenHeader(
                 shape = RectangleShape,
                 tintColor = MatteGlassTokens.NavGlassBg,
                 fallbackColor = MatteGlassTokens.NavGlassFallback,
-                blurRadius = 34.dp,
+                blurRadius = 28.dp,
                 borderWidth = 0.dp,
                 borderBrush = null
             )
-            .background(LiquidGlassTokens.InnerGlowBrush)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .heightIn(min = 68.dp)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .heightIn(min = 60.dp)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = title,
-                fontSize = 28.sp,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.5).sp,
                 color = MatteGlassTokens.CharcoalPrimary
             )
             if (onAddClick != null) {
+                // Pure icon — no circle around +
                 Box(
                     modifier = Modifier
-                        .size(46.dp)
-                        .livelyPress(pressedScale = 0.90f, depthShiftPx = 2f, onClick = onAddClick)
-                        .clip(CircleShape)
-                        .background(MatteGlassTokens.FieldGlassBg)
-                        .background(LiquidGlassTokens.InnerGlowBrush)
-                        .border(0.9.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape),
+                        .size(42.dp)
+                        .livelyPress(pressedScale = 0.86f, depthShiftPx = 1.5f, onClick = onAddClick),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Add Server",
                         tint = MatteGlassTokens.CharcoalPrimary,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
             }
         }
-        HorizontalDivider(thickness = 0.75.dp, color = MatteGlassTokens.HairlineDivider)
+        HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
     }
 }
 
+/**
+ * Clean, airy frosted top bar: pure icons + text, no circles, no dark beveled boxes.
+ */
 @Composable
 fun UnifiedMediaTopBar(
     searchQuery: String,
@@ -329,39 +322,37 @@ fun UnifiedMediaTopBar(
                 shape = RectangleShape,
                 tintColor = MatteGlassTokens.NavGlassBg,
                 fallbackColor = MatteGlassTokens.NavGlassFallback,
-                blurRadius = 34.dp,
+                blurRadius = 28.dp,
                 borderWidth = 0.dp,
                 borderBrush = null
             )
-            .background(LiquidGlassTokens.InnerGlowBrush)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .height(68.dp)
-                .padding(horizontal = 10.dp),
+                .height(60.dp)
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Flat, bright search input (no dark gradient bevel)
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .height(48.dp)
-                    .clip(NavFieldShape)
+                    .height(40.dp)
+                    .clip(SearchFieldShape)
                     .background(MatteGlassTokens.FieldGlassBg)
-                    .background(LiquidGlassTokens.InnerGlowBrush)
-                    .border(0.9.dp, MatteGlassTokens.SpecularBorderBrush, NavFieldShape)
-                    .padding(horizontal = 14.dp),
+                    .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = "Search",
                     tint = MatteGlassTokens.CharcoalMuted,
-                    modifier = Modifier.size(23.dp)
+                    modifier = Modifier.size(21.dp)
                 )
-                Spacer(Modifier.width(9.dp))
+                Spacer(Modifier.width(8.dp))
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     if (searchQuery.isEmpty()) {
                         Text(
@@ -387,37 +378,33 @@ fun UnifiedMediaTopBar(
                         contentDescription = "Clear search",
                         tint = MatteGlassTokens.CharcoalMuted,
                         modifier = Modifier
-                            .size(22.dp)
-                            .clip(CircleShape)
+                            .size(20.dp)
                             .clickable { onSearchQueryChange("") }
                     )
                 }
             }
 
+            // Category selector: clean text + chevron icon (no box/pill border)
             if (categories.isNotEmpty()) {
                 Box {
                     Row(
                         modifier = Modifier
-                            .height(48.dp)
-                            .widthIn(max = 146.dp)
-                            .livelyPress(pressedScale = 0.94f, depthShiftPx = 2f) { menuExpanded = true }
-                            .clip(NavFieldShape)
-                            .background(MatteGlassTokens.FieldGlassBg)
-                            .background(LiquidGlassTokens.InnerGlowBrush)
-                            .border(0.9.dp, MatteGlassTokens.SpecularBorderBrush, NavFieldShape)
-                            .padding(horizontal = 12.dp),
+                            .height(40.dp)
+                            .widthIn(max = 128.dp)
+                            .livelyPress(pressedScale = 0.94f, depthShiftPx = 1.5f) { menuExpanded = true }
+                            .padding(horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = displayCategory,
-                            fontSize = 13.5.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MatteGlassTokens.CharcoalPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
                         )
-                        Spacer(Modifier.width(3.dp))
+                        Spacer(Modifier.width(2.dp))
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowDown,
                             contentDescription = "Categories",
@@ -473,10 +460,11 @@ fun UnifiedMediaTopBar(
                 }
             }
 
+            // Favorites toggle: pure icon, no circle
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .livelyPress(pressedScale = 0.90f, depthShiftPx = 2f) {
+                    .size(40.dp)
+                    .livelyPress(pressedScale = 0.86f, depthShiftPx = 1.5f) {
                         if (isFavorites) {
                             val fallback = lastNonFavCategory.ifBlank {
                                 categories.firstOrNull { it != "All" && it != "Favorites" }
@@ -486,25 +474,18 @@ fun UnifiedMediaTopBar(
                         } else {
                             onSelectCategory("Favorites")
                         }
-                    }
-                    .clip(CircleShape)
-                    .background(if (isFavorites) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.FieldGlassBg)
-                    .border(
-                        0.9.dp,
-                        if (isFavorites) SolidColor(MatteGlassTokens.CharcoalPrimary) else MatteGlassTokens.SpecularBorderBrush,
-                        CircleShape
-                    ),
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (isFavorites) Icons.Default.Star else Icons.Default.StarBorder,
                     contentDescription = "Favorites",
-                    tint = if (isFavorites) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
-                    modifier = Modifier.size(24.dp)
+                    tint = MatteGlassTokens.CharcoalPrimary,
+                    modifier = Modifier.size(26.dp)
                 )
             }
         }
-        HorizontalDivider(thickness = 0.75.dp, color = MatteGlassTokens.HairlineDivider)
+        HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
     }
 }
 
@@ -524,9 +505,9 @@ private fun Modifier.tripleHairlinePortraitFrame(
     val boost = if (isActive) 1.75f else 1f
     val baseColor = if (isDark) Color.White else Color(0xFF14161A)
     val ringColors = listOf(
-        baseColor.copy(alpha = (0.12f * boost).coerceAtMost(0.42f)), // Outer hairline
-        baseColor.copy(alpha = (0.19f * boost).coerceAtMost(0.56f)), // Middle hairline
-        baseColor.copy(alpha = (0.28f * boost).coerceAtMost(0.72f))  // Inner hairline
+        baseColor.copy(alpha = (0.12f * boost).coerceAtMost(0.42f)),
+        baseColor.copy(alpha = (0.19f * boost).coerceAtMost(0.56f)),
+        baseColor.copy(alpha = (0.28f * boost).coerceAtMost(0.72f))
     )
 
     onDrawWithContent {
@@ -641,7 +622,6 @@ fun PosterMediaCard(
                 .fillMaxSize()
                 .clip(CardInnerShape)
                 .background(CardGlassTintBrush)
-                .background(LiquidGlassTokens.InnerGlowBrush)
         ) {
             if (imageRequest != null) {
                 AsyncImage(
@@ -651,6 +631,15 @@ fun PosterMediaCard(
                     modifier = Modifier.fillMaxSize()
                 )
             }
+
+            // Subtle top scrim so borderless white icons stay sharp over bright posters
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.24f)
+                    .background(CardTopScrimBrush)
+            )
 
             Box(
                 modifier = Modifier
@@ -668,12 +657,12 @@ fun PosterMediaCard(
                 )
             }
 
-            // STRICT EXCEPTION: Media card overlay icons remain untouched at original size
+            // Clean icons only — no circles around Star or More
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(7.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    .padding(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 CardGlassCircleIcon(
@@ -692,7 +681,7 @@ fun PosterMediaCard(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .padding(horizontal = 9.dp, vertical = 9.dp)
+                    .padding(horizontal = 9.dp, vertical = 8.dp)
             ) {
                 Text(
                     text = item.name,
@@ -713,7 +702,7 @@ fun PosterMediaCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Spacer(Modifier.height(7.dp))
+                Spacer(Modifier.height(5.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -728,6 +717,7 @@ fun PosterMediaCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
+                    // Pure Play icon — no circle
                     CardGlassCircleIcon(
                         icon = Icons.Default.PlayArrow,
                         contentDescription = "Play",
@@ -739,6 +729,9 @@ fun PosterMediaCard(
     }
 }
 
+/**
+ * Borderless pure white media card icon (circle background & border removed).
+ */
 @Composable
 private fun CardGlassCircleIcon(
     icon: ImageVector,
@@ -748,17 +741,14 @@ private fun CardGlassCircleIcon(
     Box(
         modifier = Modifier
             .size(32.dp)
-            .livelyPress(pressedScale = 0.86f, depthShiftPx = 1.5f, onClick = onClick)
-            .clip(CircleShape)
-            .background(Color(0x88141720))
-            .border(CardIconBorder, CircleShape),
+            .livelyPress(pressedScale = 0.84f, depthShiftPx = 1.5f, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = Color.White,
-            modifier = Modifier.size(17.dp)
+            modifier = Modifier.size(20.dp)
         )
     }
 }
@@ -781,28 +771,26 @@ fun MediaActionBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MatteGlassTokens.SheetBg,
-        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 18.dp)
-                .padding(bottom = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(bottom = 18.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 6.dp),
+                    .padding(bottom = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
                         .size(width = 48.dp, height = 64.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(6.dp))
                         .background(Color(0xFF1E222A))
-                        .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(8.dp))
                 ) {
                     if (!item.posterUrl.isNullOrBlank()) {
                         AsyncImage(
@@ -817,7 +805,7 @@ fun MediaActionBottomSheet(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = item.name,
-                        fontSize = 15.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MatteGlassTokens.CharcoalPrimary,
                         maxLines = 2,
@@ -827,7 +815,7 @@ fun MediaActionBottomSheet(
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = item.group,
-                            fontSize = 12.sp,
+                            fontSize = 12.5.sp,
                             color = MatteGlassTokens.CharcoalMuted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -836,8 +824,7 @@ fun MediaActionBottomSheet(
                 }
             }
 
-            HorizontalDivider(thickness = 0.75.dp, color = MatteGlassTokens.HairlineDivider)
-            Spacer(Modifier.height(2.dp))
+            HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
 
             if (onViewDetails != null) {
                 ActionSheetRow(
@@ -848,6 +835,7 @@ fun MediaActionBottomSheet(
                         onViewDetails()
                     }
                 )
+                HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
             }
 
             ActionSheetRow(
@@ -860,6 +848,7 @@ fun MediaActionBottomSheet(
             )
 
             if (item.contentType != ContentType.SERIES) {
+                HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
                 ActionSheetRow(
                     icon = Icons.Default.OpenInNew,
                     label = "Open Externally",
@@ -871,6 +860,7 @@ fun MediaActionBottomSheet(
             }
 
             if (onDownloadBuiltIn != null) {
+                HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
                 ActionSheetRow(
                     icon = Icons.Default.Download,
                     label = "Download (Built-in)",
@@ -882,6 +872,7 @@ fun MediaActionBottomSheet(
             }
 
             if (onDownloadExternal != null) {
+                HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
                 ActionSheetRow(
                     icon = Icons.Default.FileDownload,
                     label = "Download Externally (1DM+ / ADM)",
@@ -892,6 +883,7 @@ fun MediaActionBottomSheet(
                 )
             }
 
+            HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
             ActionSheetRow(
                 icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                 label = if (isFavorite) "Remove from Favorites" else "Add to Favorites",
@@ -904,6 +896,9 @@ fun MediaActionBottomSheet(
     }
 }
 
+/**
+ * Clean flat row — just crisp icon + text, no beveled box or border.
+ */
 @Composable
 private fun ActionSheetRow(
     icon: ImageVector,
@@ -913,12 +908,8 @@ private fun ActionSheetRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .livelyPress(pressedScale = 0.975f, depthShiftPx = 2f, onClick = onClick)
-            .clip(RoundedCornerShape(14.dp))
-            .background(MatteGlassTokens.CardGlassBg)
-            .background(LiquidGlassTokens.InnerGlowBrush)
-            .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
-            .padding(horizontal = 15.dp, vertical = 14.dp),
+            .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f, onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -927,10 +918,10 @@ private fun ActionSheetRow(
             tint = MatteGlassTokens.CharcoalPrimary,
             modifier = Modifier.size(25.dp)
         )
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(16.dp))
         Text(
             text = label,
-            fontSize = 15.sp,
+            fontSize = 15.5.sp,
             fontWeight = FontWeight.Medium,
             color = MatteGlassTokens.CharcoalPrimary
         )
