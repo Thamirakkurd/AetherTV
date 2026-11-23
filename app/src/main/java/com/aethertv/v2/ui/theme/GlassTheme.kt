@@ -2,7 +2,6 @@ package com.aethertv.v2.ui.theme
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -76,21 +75,6 @@ data class LiquidGlassPalette(
         colors = listOf(specularTop, neutralBorder, specularBottom)
     )
 
-    val cardRimBrush: Brush = Brush.verticalGradient(
-        colors = listOf(
-            Color.White.copy(alpha = if (isDark) 0.30f else 0.65f),
-            Color.White.copy(alpha = if (isDark) 0.08f else 0.16f),
-            Color.Black.copy(alpha = if (isDark) 0.24f else 0.08f)
-        )
-    )
-
-    // Luminous top highlight only — eliminates muddy dark shading on light glass
-    val innerGlowBrush: Brush = Brush.verticalGradient(
-        colors = listOf(
-            Color.White.copy(alpha = if (isDark) 0.08f else 0.35f),
-            Color.Transparent
-        )
-    )
 }
 
 val LightLiquidPalette = LiquidGlassPalette(
@@ -156,26 +140,15 @@ object MatteGlassTokens {
     val NavGlassBg: Color get() = palette.navGlassTint
     val NavGlassFallback: Color get() = palette.navGlassFallback
     val FieldGlassBg: Color get() = palette.fieldGlassBg
-    val ActivePillBg: Color get() = palette.activePillBg
-    val HeaderPillBg: Color get() = palette.headerPillBg
     val CardGlassBg: Color get() = palette.cardGlassBg
     val SheetBg: Color get() = palette.sheetBg
     val NeutralBorder: Color get() = palette.neutralBorder
-    val GlassNavBorder: Color get() = palette.glassBorder
-    val InnerTopHighlight: Color get() = palette.specularTop
     val HairlineDivider: Color get() = palette.hairlineDivider
     val NotificationDot: Color get() = palette.notificationDot
 
     val AmbientCanvasBrush: Brush get() = palette.ambientCanvasBrush
     val SpecularBorderBrush: Brush get() = palette.specularBorderBrush
-    val CardRimBrush: Brush get() = palette.cardRimBrush
-    val InnerGlowBrush: Brush get() = palette.innerGlowBrush
 }
-
-fun matteGlassBorder(): BorderStroke = BorderStroke(
-    width = 0.75.dp,
-    brush = MatteGlassTokens.SpecularBorderBrush
-)
 
 fun liquidHazeStyle(
     tintColor: Color = MatteGlassTokens.NavGlassBg,

@@ -175,7 +175,7 @@ object OnlineSubtitleService {
                 .trim()
             if (cleanQuery.isBlank()) return@withContext emptyList()
 
-            val encoded = URLEncoder.encode(cleanQuery, "UTF-8")
+            val encoded = URLEncoder.encode(cleanQuery, "UTF-8").replace("+", "%20")
             val endpoint = "https://rest.opensubtitles.org/search/query-$encoded/sublanguageid-$lang"
             val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 10000
@@ -183,9 +183,12 @@ object OnlineSubtitleService {
                 setRequestProperty("User-Agent", "TemporaryUserAgent")
                 setRequestProperty("Accept", "application/json")
             }
-            val code = conn.responseCode
-            if (code !in 200..299) return@withContext emptyList()
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            val body = try {
+                if (conn.responseCode !in 200..299) return@withContext emptyList()
+                conn.inputStream.bufferedReader().use { it.readText() }
+            } finally {
+                conn.disconnect()
+            }
             val arr = JSONArray(body)
             val results = ArrayList<OnlineSubtitleResult>(arr.length().coerceAtMost(25))
             for (i in 0 until arr.length().coerceAtMost(25)) {
@@ -221,8 +224,12 @@ object OnlineSubtitleService {
                     readTimeout = 12000
                     setRequestProperty("User-Agent", "TemporaryUserAgent")
                 }
-                conn.inputStream.use { input ->
-                    outFile.outputStream().use { output -> input.copyTo(output) }
+                try {
+                    conn.inputStream.use { input ->
+                        outFile.outputStream().use { output -> input.copyTo(output) }
+                    }
+                } finally {
+                    conn.disconnect()
                 }
                 Uri.fromFile(outFile)
             } catch (_: Exception) {

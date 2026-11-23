@@ -116,7 +116,6 @@ fun LiveTvScreen(
                             channel.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
                                 ImageRequest.Builder(context)
                                     .data(url)
-                                    .crossfade(true)
                                     .size(144, 144)
                                     .build()
                             }

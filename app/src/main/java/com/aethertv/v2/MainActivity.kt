@@ -401,6 +401,7 @@ private fun AetherV2App(
         enabled = cardMenuTarget != null ||
             (activePlayerItem != null && !isPlayerMini) ||
             selectedDetailItem != null ||
+            activeLibraryPage != null ||
             selectedTab != 0
     ) {
         when {
@@ -547,7 +548,7 @@ private fun AetherV2App(
         when (item.contentType) {
             ContentType.MOVIE -> {
                 val vodId = item.id.removePrefix("vod_")
-                if (vodId.isBlank()) return
+                if (vodId.isBlank() || vodId == item.id) return
                 scope.launch {
                     val diskInfo = PlaylistDiskCache.loadDetailInfo(context, cacheKey)
                     if (diskInfo != null) {
@@ -1041,7 +1042,7 @@ private fun AetherV2App(
             HorizontalPager(
                 state = pagerState,
                 beyondViewportPageCount = 1,
-                userScrollEnabled = !detailOpen && (activePlayerItem == null || isPlayerMini),
+                userScrollEnabled = !detailOpen && activeLibraryPage == null && (activePlayerItem == null || isPlayerMini),
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
@@ -1238,7 +1239,7 @@ private fun AetherV2App(
             }
 
             AnimatedVisibility(
-                visible = barsVisible && !detailOpen,
+                visible = barsVisible && !detailOpen && activeLibraryPage == null,
                 enter = slideInVertically(spring(dampingRatio = 0.80f, stiffness = 360f)) { it } + fadeIn(tween(180)),
                 exit = slideOutVertically(spring(dampingRatio = 0.86f, stiffness = 400f)) { it } + fadeOut(tween(160)),
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -1353,12 +1354,30 @@ private fun AetherV2App(
                     onBack = { selectedDetailItem = null },
                     onToggleFavorite = { toggleFavorite(shownDetail) },
                     onWatchNow = {
-                        playItem(
-                            item = shownDetail,
-                            info = detailInfo,
-                            episodes = detailEpisodes,
-                            seriesParent = if (shownDetail.contentType == ContentType.SERIES) shownDetail else null
-                        )
+                        if (shownDetail.contentType == ContentType.SERIES) {
+                            val firstEp = detailEpisodes.firstOrNull()
+                            if (firstEp != null) {
+                                val epMedia = MediaItem(
+                                    id = "ep_${firstEp.id}",
+                                    name = "${shownDetail.name} • ${firstEp.title}",
+                                    group = firstEp.season,
+                                    posterUrl = shownDetail.posterUrl,
+                                    streamUrl = firstEp.streamUrl,
+                                    contentType = ContentType.MOVIE,
+                                    badge = firstEp.season
+                                )
+                                playItem(epMedia, detailInfo, detailEpisodes, shownDetail)
+                            } else {
+                                Toast.makeText(context, "Loading episodes...", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            playItem(
+                                item = shownDetail,
+                                info = detailInfo,
+                                episodes = detailEpisodes,
+                                seriesParent = null
+                            )
+                        }
                     },
                     onDownloadItem = { triggerDownload(shownDetail.streamUrl, shownDetail.name) },
                     onEpisodeClick = { ep ->
@@ -1406,7 +1425,7 @@ private fun AetherV2App(
                 expandAnim = playerExpandAnim,
                 isMiniPlayer = isPlayerMini,
                 isInPipMode = isInPipMode,
-                barsVisible = barsVisible && !detailOpen,
+                barsVisible = barsVisible && !detailOpen && activeLibraryPage == null,
                 favoriteIds = favoriteIds,
                 liveChannels = livePool,
                 liveCategories = liveCatNames,

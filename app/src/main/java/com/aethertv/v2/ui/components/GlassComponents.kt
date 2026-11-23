@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -110,7 +109,7 @@ fun FloatingGlassNavBar(
                 shape = RectangleShape,
                 tintColor = MatteGlassTokens.NavGlassBg,
                 fallbackColor = MatteGlassTokens.NavGlassFallback,
-                blurRadius = 28.dp,
+                blurRadius = 16.dp,
                 borderWidth = 0.dp,
                 borderBrush = null
             )
@@ -244,7 +243,7 @@ fun SimpleScreenHeader(
                 shape = RectangleShape,
                 tintColor = MatteGlassTokens.NavGlassBg,
                 fallbackColor = MatteGlassTokens.NavGlassFallback,
-                blurRadius = 28.dp,
+                blurRadius = 16.dp,
                 borderWidth = 0.dp,
                 borderBrush = null
             )
@@ -324,7 +323,7 @@ fun UnifiedMediaTopBar(
                 shape = RectangleShape,
                 tintColor = MatteGlassTokens.NavGlassBg,
                 fallbackColor = MatteGlassTokens.NavGlassFallback,
-                blurRadius = 28.dp,
+                blurRadius = 16.dp,
                 borderWidth = 0.dp,
                 borderBrush = null
             )

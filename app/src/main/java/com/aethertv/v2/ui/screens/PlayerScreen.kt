@@ -400,6 +400,7 @@ fun UnifiedMorphPlayerOverlay(
     var subtitleDelayMs by remember { mutableLongStateOf(0L) }
     var externalSubtitleUri by remember { mutableStateOf<Uri?>(null) }
     var delayedEmbeddedText by remember { mutableStateOf("") }
+    var cueDelayJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     // Brightness / Volume & Double-Tap Seek HUDs
     var activeHud by remember { mutableStateOf<GestureHudType?>(null) }
@@ -459,6 +460,7 @@ fun UnifiedMorphPlayerOverlay(
         videoCodec = ""
         audioInfo = ""
         bitrateInfo = ""
+        cueDelayJob?.cancel()
         externalSubtitleUri = null
         delayedEmbeddedText = ""
         subtitleDelayMs = 0L
@@ -542,10 +544,11 @@ fun UnifiedMorphPlayerOverlay(
             }
 
             override fun onCues(cueGroup: CueGroup) {
+                cueDelayJob?.cancel()
                 if (!isLive && externalSubtitleUri == null && subtitleDelayMs > 0L) {
                     val cueText = cueGroup.cues.mapNotNull { it.text?.toString() }.joinToString("\n")
                     val waitMs = subtitleDelayMs
-                    scope.launch {
+                    cueDelayJob = scope.launch {
                         delay(waitMs)
                         delayedEmbeddedText = cueText
                     }
@@ -589,6 +592,7 @@ fun UnifiedMorphPlayerOverlay(
         exoPlayer.addListener(listener)
 
         onDispose {
+            cueDelayJob?.cancel()
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             exoPlayer.removeListener(listener)
@@ -599,11 +603,10 @@ fun UnifiedMorphPlayerOverlay(
 
 
     LaunchedEffect(exoPlayer, isLive) {
+        if (isLive) return@LaunchedEffect
         while (true) {
-            if (!isLive) {
-                currentPosMs = exoPlayer.currentPosition.coerceAtLeast(0L)
-                if (exoPlayer.duration > 0) durationMs = exoPlayer.duration
-            }
+            currentPosMs = exoPlayer.currentPosition.coerceAtLeast(0L)
+            if (exoPlayer.duration > 0) durationMs = exoPlayer.duration
             delay(450)
         }
     }
@@ -679,7 +682,6 @@ fun UnifiedMorphPlayerOverlay(
 
     // Updated refs so active pointer gestures never cancel mid-drag
     val isLiveState by rememberUpdatedState(isLive)
-    val isFullscreenState by rememberUpdatedState(effectiveFullscreen)
     val onToggleMinimizeState by rememberUpdatedState(onToggleMinimize)
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -803,7 +805,7 @@ fun UnifiedMorphPlayerOverlay(
                         shape = dockShape,
                         tintColor = MatteGlassTokens.NavGlassBg,
                         fallbackColor = MatteGlassTokens.NavGlassFallback,
-                        blurRadius = 32.dp,
+                        blurRadius = 16.dp,
                         borderWidth = 0.9.dp,
                         borderBrush = MatteGlassTokens.SpecularBorderBrush
                     )
@@ -1898,7 +1900,7 @@ private fun LiveFeedBelowPlayer(
                     shape = barShape,
                     tintColor = MatteGlassTokens.NavGlassBg,
                     fallbackColor = MatteGlassTokens.NavGlassFallback,
-                    blurRadius = 32.dp,
+                    blurRadius = 16.dp,
                     borderWidth = 0.9.dp,
                     borderBrush = MatteGlassTokens.SpecularBorderBrush
                 )
@@ -2621,7 +2623,6 @@ private fun YouTubeChannelFeedCard(
         channel.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
             ImageRequest.Builder(context)
                 .data(url)
-                .crossfade(true)
                 .size(280, 180)
                 .build()
         }
