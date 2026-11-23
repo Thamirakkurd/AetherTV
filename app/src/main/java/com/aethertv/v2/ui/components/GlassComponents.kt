@@ -1,10 +1,24 @@
 package com.aethertv.v2.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -385,14 +399,25 @@ fun UnifiedMediaTopBar(
                 }
             }
 
-            // Category selector: clean text + chevron icon (no box/pill border)
+            // Category selector: smooth spring-animated LazyColumn popup anchored to button
             if (categories.isNotEmpty()) {
+                val density = LocalDensity.current
+                val expandedState = remember { MutableTransitionState(false) }
+                expandedState.targetState = menuExpanded
+                val chevronRotation by animateFloatAsState(
+                    targetValue = if (menuExpanded) 180f else 0f,
+                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 460f),
+                    label = "catChevron"
+                )
+
                 Box {
                     Row(
                         modifier = Modifier
                             .height(40.dp)
                             .widthIn(max = 128.dp)
-                            .livelyPress(pressedScale = 0.94f, depthShiftPx = 1.5f) { menuExpanded = true }
+                            .livelyPress(pressedScale = 0.94f, depthShiftPx = 1.5f) {
+                                menuExpanded = !menuExpanded
+                            }
                             .padding(horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -410,52 +435,91 @@ fun UnifiedMediaTopBar(
                             imageVector = Icons.Default.KeyboardArrowDown,
                             contentDescription = "Categories",
                             tint = MatteGlassTokens.CharcoalPrimary,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier
+                                .size(22.dp)
+                                .graphicsLayer { rotationZ = chevronRotation }
                         )
                     }
 
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                        modifier = Modifier
-                            .background(MatteGlassTokens.SheetBg)
-                            .widthIn(min = 200.dp, max = 290.dp)
-                            .heightIn(max = 420.dp)
-                    ) {
-                        categories.forEach { cat ->
-                            val active = cat == selectedCategory
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                    if (expandedState.currentState || expandedState.targetState) {
+                        val menuOffsetY = with(density) { 44.dp.roundToPx() }
+                        val initialIndex = remember(categories, selectedCategory) {
+                            (categories.indexOf(selectedCategory).coerceAtLeast(0) - 2).coerceAtLeast(0)
+                        }
+                        val catListState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+
+                        Popup(
+                            alignment = Alignment.TopEnd,
+                            offset = IntOffset(0, menuOffsetY),
+                            onDismissRequest = { menuExpanded = false },
+                            properties = PopupProperties(focusable = true)
+                        ) {
+                            AnimatedVisibility(
+                                visibleState = expandedState,
+                                enter = scaleIn(
+                                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 480f),
+                                    initialScale = 0.86f,
+                                    transformOrigin = TransformOrigin(0.85f, 0f)
+                                ) + fadeIn(tween(150)),
+                                exit = scaleOut(
+                                    animationSpec = tween(130),
+                                    targetScale = 0.88f,
+                                    transformOrigin = TransformOrigin(0.85f, 0f)
+                                ) + fadeOut(tween(120))
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MatteGlassTokens.SheetBg,
+                                    border = BorderStroke(0.75.dp, MatteGlassTokens.HairlineDivider),
+                                    shadowElevation = 10.dp,
+                                    modifier = Modifier
+                                        .padding(horizontal = 4.dp, vertical = 6.dp)
+                                        .width(260.dp)
+                                        .heightIn(max = 400.dp)
+                                ) {
+                                    LazyColumn(
+                                        state = catListState,
+                                        contentPadding = PaddingValues(vertical = 6.dp)
                                     ) {
-                                        Text(
-                                            text = cat,
-                                            fontSize = 14.sp,
-                                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                            color = MatteGlassTokens.CharcoalPrimary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        if (active) {
-                                            Spacer(Modifier.width(8.dp))
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = MatteGlassTokens.CharcoalPrimary,
-                                                modifier = Modifier.size(20.dp)
-                                            )
+                                        items(
+                                            items = categories,
+                                            key = { it }
+                                        ) { cat ->
+                                            val active = cat == selectedCategory
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        menuExpanded = false
+                                                        onSelectCategory(cat)
+                                                    }
+                                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = cat,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                                    color = MatteGlassTokens.CharcoalPrimary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                if (active) {
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = MatteGlassTokens.CharcoalPrimary,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    onSelectCategory(cat)
                                 }
-                            )
+                            }
                         }
                     }
                 }
