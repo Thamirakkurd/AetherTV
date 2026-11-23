@@ -289,7 +289,6 @@ private fun AetherV2App(
     var downloadedFiles by remember { mutableStateOf(MediaDownloadHelper.listDownloadedFiles()) }
 
     var cardMenuTarget by remember { mutableStateOf<MediaItem?>(null) }
-    var confirmAllTab by remember { mutableStateOf<Int?>(null) }
 
     var liveCategories by remember { mutableStateOf<List<CategoryItem>>(emptyList()) }
     var selectedLiveCat by remember { mutableStateOf(prefs.getString("last_live_cat", "") ?: "") }
@@ -1102,8 +1101,7 @@ private fun AetherV2App(
                             searchPlaceholder = "Search movies...",
                             onSearchQueryChange = { searchQuery = it },
                             onSelectCategory = { cat ->
-                                if (cat == "All") confirmAllTab = 1
-                                else loadVodCategory(cat, forceNetwork = false)
+                                loadVodCategory(cat, forceNetwork = false)
                             },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
@@ -1126,8 +1124,7 @@ private fun AetherV2App(
                             searchPlaceholder = "Search series...",
                             onSearchQueryChange = { searchQuery = it },
                             onSelectCategory = { cat ->
-                                if (cat == "All") confirmAllTab = 2
-                                else loadSeriesCategory(cat, forceNetwork = false)
+                                loadSeriesCategory(cat, forceNetwork = false)
                             },
                             onItemClick = { openDetail(it) },
                             onFavoriteClick = { toggleFavorite(it) },
@@ -1149,8 +1146,7 @@ private fun AetherV2App(
                             searchQuery = searchQuery,
                             onSearchQueryChange = { searchQuery = it },
                             onSelectCategory = { cat ->
-                                if (cat == "All") confirmAllTab = 3
-                                else loadLiveCategory(cat, forceNetwork = false)
+                                loadLiveCategory(cat, forceNetwork = false)
                             },
                             onPlayClick = { playItem(it) },
                             onFavoriteClick = { toggleFavorite(it) },
@@ -1177,6 +1173,7 @@ private fun AetherV2App(
                             onAddServerClick = { showAddDialog = true },
                             onRefreshPlaylist = {
                                 val srv = activeServer ?: return@SettingsScreen
+                                Toast.makeText(context, "Refreshing playlist cache...", Toast.LENGTH_SHORT).show()
                                 scope.launch {
                                     PlaylistDiskCache.clearAll(context)
                                     resetActiveState()
@@ -1506,69 +1503,6 @@ private fun AetherV2App(
             } else null,
             onToggleFavorite = { toggleFavorite(target) }
         )
-    }
-
-    // Confirmation Prompt when tapping "All"
-    confirmAllTab?.let { targetTab ->
-        Dialog(onDismissRequest = { confirmAllTab = null }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(MatteGlassTokens.SheetBg)
-                    .border(1.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(22.dp))
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Text(
-                    text = "Update All List?",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MatteGlassTokens.CharcoalPrimary
-                )
-                Text(
-                    text = "Do you want to update and reload everything from the server, or use your saved cache?",
-                    fontSize = 13.sp,
-                    color = MatteGlassTokens.CharcoalMuted
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .livelyPress(pressedScale = 0.94f) {
-                                confirmAllTab = null
-                                if (targetTab == 1) loadVodCategory("All", forceNetwork = false)
-                                if (targetTab == 2) loadSeriesCategory("All", forceNetwork = false)
-                                if (targetTab == 3) loadLiveCategory("All", forceNetwork = false)
-                            }
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MatteGlassTokens.SubtleSurface)
-                            .border(0.8.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    ) {
-                        Text("No (Use Cache)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CharcoalPrimary)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .livelyPress(pressedScale = 0.94f) {
-                                confirmAllTab = null
-                                if (targetTab == 1) loadVodCategory("All", forceNetwork = true)
-                                if (targetTab == 2) loadSeriesCategory("All", forceNetwork = true)
-                                if (targetTab == 3) loadLiveCategory("All", forceNetwork = true)
-                            }
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MatteGlassTokens.CharcoalPrimary)
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    ) {
-                        Text("Yes (Update)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MatteGlassTokens.CanvasWhite)
-                    }
-                }
-            }
-        }
     }
 
     // Downloader Choice Prompt when mode is "Ask every time"

@@ -2,6 +2,9 @@ package com.aethertv.v2.ui.theme
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.ripple
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -190,10 +193,15 @@ fun Modifier.livelyPress(
     enabled: Boolean = true,
     pressedScale: Float = 0.968f,
     depthShiftPx: Float = 3f,
+    bounded: Boolean = true,
     onClick: () -> Unit
 ): Modifier = composed {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
+    val rippleColor = MatteGlassTokens.CharcoalPrimary
+    val rippleIndication = remember(bounded, rippleColor) {
+        ripple(bounded = bounded, color = rippleColor)
+    }
     val scale by animateFloatAsState(
         targetValue = if (pressed && enabled) pressedScale else 1f,
         animationSpec = spring(dampingRatio = 0.50f, stiffness = 420f),
@@ -204,16 +212,22 @@ fun Modifier.livelyPress(
         animationSpec = spring(dampingRatio = 0.56f, stiffness = 420f),
         label = "livelyDepth"
     )
+    val pressAlpha by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.84f else 1f,
+        animationSpec = tween(durationMillis = 75),
+        label = "livelyAlpha"
+    )
     this
         .graphicsLayer {
             scaleX = scale
             scaleY = scale
             translationY = translateY
+            alpha = pressAlpha
         }
         .clickable(
             enabled = enabled,
             interactionSource = interactionSource,
-            indication = null,
+            indication = rippleIndication,
             onClick = onClick
         )
 }
@@ -277,7 +291,10 @@ fun MatteGlassTheme(
         )
     }
 
-    CompositionLocalProvider(LocalHazeState provides hazeState) {
+    CompositionLocalProvider(
+        LocalHazeState provides hazeState,
+        LocalContentColor provides targetPalette.primaryText
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = typography,

@@ -482,7 +482,7 @@ fun SettingsScreen(
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                text = "AetherTV v3.4.6 • github.com/Thamirakkurd",
+                                text = "AetherTV v3.4.8 • github.com/Thamirakkurd",
                                 fontSize = 12.5.sp,
                                 color = MatteGlassTokens.CharcoalMuted,
                                 maxLines = 1,
