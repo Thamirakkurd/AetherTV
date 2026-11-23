@@ -3,9 +3,10 @@ package com.aethertv.v2.ui.screens
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -18,13 +19,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,9 +45,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -46,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import coil.size.Precision
 import com.aethertv.v2.data.ContentType
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.components.LocalGridSpringPhysics
@@ -91,6 +104,7 @@ private fun Modifier.recentTripleHairlineFrame(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     favoriteMedia: List<MediaItem>,
@@ -103,14 +117,19 @@ fun HomeScreen(
     onFavoriteClick: (MediaItem) -> Unit,
     onPlayClick: (MediaItem) -> Unit,
     onMoreClick: (MediaItem) -> Unit = onItemClick,
-    onAddPlaylistClick: () -> Unit
+    onAddPlaylistClick: () -> Unit,
+    onRemoveRecent: (MediaItem) -> Unit = {},
+    onClearRecents: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val hazeState = LocalHazeState.current
     val physicsState = rememberGridSpringPhysicsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val isDark = MatteGlassTokens.isDark
+
+    var recentMenuTarget by remember { mutableStateOf<MediaItem?>(null) }
 
     LaunchedEffect(listState.isScrollInProgress) {
         if (!listState.isScrollInProgress) {
@@ -128,8 +147,8 @@ fun HomeScreen(
                     .background(MatteGlassTokens.AmbientCanvasBrush)
                     .nestedScroll(physicsState.nestedScrollConnection),
                 contentPadding = PaddingValues(
-                    top = topInset + 80.dp,
-                    bottom = navInset + 96.dp + extraBottomPadding
+                    top = topInset + 72.dp,
+                    bottom = navInset + 84.dp + extraBottomPadding
                 ),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
@@ -139,10 +158,9 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp)
-                                .clip(RoundedCornerShape(18.dp))
+                                .clip(RoundedCornerShape(16.dp))
                                 .background(MatteGlassTokens.CardGlassBg)
-                                .background(LiquidGlassTokens.InnerGlowBrush)
-                                .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(18.dp))
+                                .border(0.6.dp, MatteGlassTokens.HairlineDivider, RoundedCornerShape(16.dp))
                                 .padding(18.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -203,8 +221,7 @@ fun HomeScreen(
                                     .padding(horizontal = 12.dp)
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(MatteGlassTokens.CardGlassBg)
-                                    .background(LiquidGlassTokens.InnerGlowBrush)
-                                    .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(16.dp))
+                                    .border(0.6.dp, MatteGlassTokens.HairlineDivider, RoundedCornerShape(16.dp))
                                     .padding(16.dp)
                             ) {
                                 Text(
@@ -305,15 +322,17 @@ fun HomeScreen(
                                         animationSpec = spring(dampingRatio = 0.60f, stiffness = Spring.StiffnessMediumLow),
                                         label = "recentPop"
                                     )
-                                    val stagger = 1f + ((index % 3) * 0.14f)
+                                    val stagger = 1f + ((index % 3) * 0.12f)
                                     val thumbShape = RoundedCornerShape(LiquidGlassTokens.CardCornerRadius)
                                     val thumbReq = remember(item.posterUrl) {
                                         item.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
                                             ImageRequest.Builder(context)
                                                 .data(url)
                                                 .allowHardware(true)
-                                                .crossfade(120)
-                                                .size(260, 360)
+                                                .bitmapConfig(android.graphics.Bitmap.Config.RGB_565)
+                                                .precision(Precision.INEXACT)
+                                                .crossfade(false)
+                                                .size(240, 340)
                                                 .build()
                                         }
                                     }
@@ -325,17 +344,22 @@ fun HomeScreen(
                                             .graphicsLayer {
                                                 scaleX = popScale
                                                 scaleY = popScale
-                                                translationY = (if (pressed) -5f else 0f) + (physicsState.verticalImpulse.value * 10f * stagger)
-                                                translationX = physicsState.lateralImpulse.value * 8f * stagger
+                                                translationY = (if (pressed) -5f else 0f) + (physicsState.verticalImpulse * 9f * stagger)
+                                                translationX = physicsState.lateralImpulse * 7f * stagger
                                                 shadowElevation = if (pressed) 16f else 0f
                                             }
-                                            .clickable(
+                                            .combinedClickable(
                                                 interactionSource = interactionSource,
-                                                indication = null
-                                            ) {
-                                                if (item.contentType == ContentType.LIVE) onPlayClick(item)
-                                                else onItemClick(item)
-                                            }
+                                                indication = null,
+                                                onClick = {
+                                                    if (item.contentType == ContentType.LIVE) onPlayClick(item)
+                                                    else onItemClick(item)
+                                                },
+                                                onLongClick = {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    recentMenuTarget = item
+                                                }
+                                            )
                                     ) {
                                         Box(
                                             modifier = Modifier
@@ -345,7 +369,6 @@ fun HomeScreen(
                                                 .padding(LiquidGlassTokens.CardFrameInset)
                                                 .clip(thumbShape)
                                                 .background(LiquidGlassTokens.GlassFillDark)
-                                                .background(LiquidGlassTokens.InnerGlowBrush)
                                         ) {
                                             if (thumbReq != null) {
                                                 AsyncImage(
@@ -381,5 +404,150 @@ fun HomeScreen(
             onAddClick = onAddPlaylistClick,
             modifier = Modifier.align(Alignment.TopCenter)
         )
+
+        // Long-press action sheet for Recently Watched items
+        recentMenuTarget?.let { target ->
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            ModalBottomSheet(
+                onDismissRequest = { recentMenuTarget = null },
+                sheetState = sheetState,
+                containerColor = MatteGlassTokens.SheetBg,
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 18.dp)
+                        .padding(bottom = 18.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 48.dp, height = 64.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF1E222A))
+                        ) {
+                            if (!target.posterUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = target.posterUrl,
+                                    contentDescription = target.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = target.name,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MatteGlassTokens.CharcoalPrimary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (target.group.isNotBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = target.group,
+                                    fontSize = 12.5.sp,
+                                    color = MatteGlassTokens.CharcoalMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f) {
+                                recentMenuTarget = null
+                                if (target.contentType == ContentType.LIVE) onPlayClick(target)
+                                else onItemClick(target)
+                            }
+                            .padding(horizontal = 4.dp, vertical = 15.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.PlayArrow,
+                            contentDescription = "Resume",
+                            tint = MatteGlassTokens.CharcoalPrimary,
+                            modifier = Modifier.size(25.dp)
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            text = if (target.contentType == ContentType.LIVE) "Watch Live" else "Open & Resume",
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MatteGlassTokens.CharcoalPrimary
+                        )
+                    }
+
+                    HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f) {
+                                recentMenuTarget = null
+                                onRemoveRecent(target)
+                            }
+                            .padding(horizontal = 4.dp, vertical = 15.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.DeleteOutline,
+                            contentDescription = "Remove from Recently Watched",
+                            tint = MatteGlassTokens.NotificationDot,
+                            modifier = Modifier.size(25.dp)
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            text = "Remove from Recently Watched",
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MatteGlassTokens.NotificationDot
+                        )
+                    }
+
+                    HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f) {
+                                recentMenuTarget = null
+                                onClearRecents()
+                            }
+                            .padding(horizontal = 4.dp, vertical = 15.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.DeleteSweep,
+                            contentDescription = "Clear All Recently Watched",
+                            tint = MatteGlassTokens.NotificationDot,
+                            modifier = Modifier.size(25.dp)
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            text = "Clear All Recently Watched",
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MatteGlassTokens.NotificationDot
+                        )
+                    }
+                }
+            }
+        }
     }
 }

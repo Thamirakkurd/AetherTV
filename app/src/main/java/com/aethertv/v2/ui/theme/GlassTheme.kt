@@ -179,8 +179,8 @@ fun matteGlassBorder(): BorderStroke = BorderStroke(
 
 fun liquidHazeStyle(
     tintColor: Color = MatteGlassTokens.NavGlassBg,
-    blurRadius: Dp = 28.dp,
-    noiseFactor: Float = 0.02f
+    blurRadius: Dp = 16.dp,
+    noiseFactor: Float = 0f
 ): HazeStyle = HazeStyle(
     backgroundColor = MatteGlassTokens.CanvasWhite,
     tint = HazeTint(color = tintColor),
@@ -193,7 +193,7 @@ fun Modifier.liquidGlassSurface(
     shape: Shape = RectangleShape,
     tintColor: Color = MatteGlassTokens.NavGlassBg,
     fallbackColor: Color = MatteGlassTokens.NavGlassFallback,
-    blurRadius: Dp = 28.dp,
+    blurRadius: Dp = 16.dp,
     borderWidth: Dp = 0.75.dp,
     borderBrush: Brush? = MatteGlassTokens.SpecularBorderBrush
 ): Modifier = composed {

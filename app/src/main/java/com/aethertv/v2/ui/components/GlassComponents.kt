@@ -584,8 +584,10 @@ fun PosterMediaCard(
             ImageRequest.Builder(context)
                 .data(url)
                 .allowHardware(true)
-                .crossfade(120)
-                .size(if (isLarge) 540 else 360, if (isLarge) 780 else 540)
+                .bitmapConfig(android.graphics.Bitmap.Config.RGB_565)
+                .precision(coil.size.Precision.INEXACT)
+                .crossfade(false)
+                .size(if (isLarge) 480 else 320, if (isLarge) 700 else 480)
                 .build()
         }
     }
@@ -597,17 +599,14 @@ fun PosterMediaCard(
         modifier = modifier
             .zIndex(if (active) 10f else 0f)
             .graphicsLayer {
-                val vImpulse = physicsState?.verticalImpulse?.value ?: 0f
-                val hImpulse = physicsState?.lateralImpulse?.value ?: 0f
+                val vImpulse = physicsState?.verticalImpulse ?: 0f
+                val hImpulse = physicsState?.lateralImpulse ?: 0f
 
                 scaleX = popScale
                 scaleY = popScale
-                translationY = popLiftY + (vImpulse * 13f * staggerFactor)
-                translationX = hImpulse * 9f * staggerFactor
-                cameraDistance = 16f * density
-                rotationX = (vImpulse * 3.0f).coerceIn(-4f, 4f)
-                rotationY = (-hImpulse * 2.8f).coerceIn(-4f, 4f)
-                shadowElevation = if (active) 22f else 0f
+                translationY = popLiftY + (vImpulse * 11f * staggerFactor)
+                translationX = hImpulse * 8f * staggerFactor
+                shadowElevation = if (active) 20f else 0f
             }
             .tripleHairlinePortraitFrame(isDark = isDark, isActive = active)
             .clickable(

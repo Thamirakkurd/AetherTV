@@ -98,6 +98,38 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Lock window to display's highest refresh rate (120Hz)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            val dm = getSystemService(android.content.Context.DISPLAY_SERVICE) as? android.hardware.display.DisplayManager
+            val maxMode = dm?.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.supportedModes?.maxByOrNull { it.refreshRate }
+            if (maxMode != null) {
+                window.attributes = window.attributes.apply {
+                    preferredDisplayModeId = maxMode.modeId
+                }
+            }
+        }
+
+        // High-throughput Coil cache for instant zero-flicker poster scrolling
+        coil.Coil.setImageLoader(
+            coil.ImageLoader.Builder(applicationContext)
+                .memoryCache {
+                    coil.memory.MemoryCache.Builder(applicationContext)
+                        .maxSizePercent(0.35)
+                        .build()
+                }
+                .diskCache {
+                    coil.disk.DiskCache.Builder()
+                        .directory(java.io.File(applicationContext.cacheDir, "poster_cache"))
+                        .maxSizeBytes(250L * 1024 * 1024)
+                        .build()
+                }
+                .allowHardware(true)
+                .bitmapConfig(android.graphics.Bitmap.Config.RGB_565)
+                .crossfade(false)
+                .respectCacheHeaders(false)
+                .build()
+        )
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
@@ -417,6 +449,17 @@ private fun AetherV2App(
         val updated = (listOf(item) + recents.filterNot { it.id == item.id }).take(20)
         recents = updated
         prefs.edit().putString("recents_json", XtreamClient.encodeItems(updated)).apply()
+    }
+
+    fun removeRecent(item: MediaItem) {
+        val updated = recents.filterNot { it.id == item.id }
+        recents = updated
+        prefs.edit().putString("recents_json", XtreamClient.encodeItems(updated)).apply()
+    }
+
+    fun clearRecents() {
+        recents = emptyList()
+        prefs.edit().remove("recents_json").apply()
     }
 
     fun fetchMovieDetailForPlayerIfNeeded(movie: MediaItem) {
@@ -1025,7 +1068,9 @@ private fun AetherV2App(
                             onFavoriteClick = { toggleFavorite(it) },
                             onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) },
                             onMoreClick = { cardMenuTarget = it },
-                            onAddPlaylistClick = { showAddDialog = true }
+                            onAddPlaylistClick = { showAddDialog = true },
+                            onRemoveRecent = { removeRecent(it) },
+                            onClearRecents = { clearRecents() }
                         )
                     }
                     1 -> {
