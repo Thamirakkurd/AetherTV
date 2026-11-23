@@ -316,6 +316,11 @@ private fun AetherV2App(
     var recents by remember { mutableStateOf(XtreamClient.decodeItems(prefs.getString("recents_json", null))) }
     val favoriteIds = remember(favorites) { favorites.map { it.id }.toSet() }
 
+    // Dedicated Home collection pages ("favorites" or "recents")
+    var activeLibraryPage by remember { mutableStateOf<String?>(null) }
+    var lastLibraryPage by remember { mutableStateOf<String?>(null) }
+    var libraryRecentMenuTarget by remember { mutableStateOf<MediaItem?>(null) }
+
     // Detail screen state
     var selectedDetailItem by remember { mutableStateOf<MediaItem?>(null) }
     var lastRenderedDetailItem by remember { mutableStateOf<MediaItem?>(null) }
@@ -403,6 +408,7 @@ private fun AetherV2App(
             cardMenuTarget != null -> cardMenuTarget = null
             activePlayerItem != null && !isPlayerMini -> isPlayerMini = true
             selectedDetailItem != null -> selectedDetailItem = null
+            activeLibraryPage != null -> activeLibraryPage = null
             selectedTab != 0 -> {
                 searchQuery = ""
                 barsVisible = true
@@ -1069,6 +1075,14 @@ private fun AetherV2App(
                             onPlayClick = { if (it.contentType == ContentType.SERIES) openDetail(it) else playItem(it) },
                             onMoreClick = { cardMenuTarget = it },
                             onAddPlaylistClick = { showAddDialog = true },
+                            onOpenFavoritesPage = {
+                                lastLibraryPage = "favorites"
+                                activeLibraryPage = "favorites"
+                            },
+                            onOpenRecentsPage = {
+                                lastLibraryPage = "recents"
+                                activeLibraryPage = "recents"
+                            },
                             onRemoveRecent = { removeRecent(it) },
                             onClearRecents = { clearRecents() }
                         )
@@ -1238,6 +1252,7 @@ private fun AetherV2App(
                     pagePosition = livePagePos,
                     onSelect = { idx ->
                         selectedDetailItem = null
+                        activeLibraryPage = null
                         barsVisible = true
                         scope.launch {
                             pagerState.animateScrollToPage(
@@ -1254,6 +1269,69 @@ private fun AetherV2App(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = 0.28f * combinedDepth))
+                )
+            }
+        }
+
+        // Slide-from-right dedicated Favorites / Recently Watched page
+        AnimatedVisibility(
+            visible = activeLibraryPage != null,
+            enter = slideInHorizontally(spring(dampingRatio = 0.84f, stiffness = 310f)) { it } + fadeIn(tween(180)),
+            exit = slideOutHorizontally(spring(dampingRatio = 0.86f, stiffness = 360f)) { it } + fadeOut(tween(160)),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            val shownLibraryPage = activeLibraryPage ?: lastLibraryPage
+            val isRecentsPage = shownLibraryPage == "recents"
+            val pageItems = remember(shownLibraryPage, favorites, recents) {
+                if (isRecentsPage) recents
+                else favorites.filter { it.contentType == ContentType.MOVIE || it.contentType == ContentType.SERIES }
+            }
+            com.aethertv.v2.ui.screens.LibraryCollectionScreen(
+                title = if (isRecentsPage) "Recently Watched" else "Favorites",
+                items = pageItems,
+                favoriteIds = favoriteIds,
+                emptyMessage = if (isRecentsPage) {
+                    "Items you watch will show up here for quick resume."
+                } else {
+                    "Tap ★ on any movie or series to add it to Favorites."
+                },
+                extraBottomPadding = miniPlayerExtraPadding,
+                onBack = { activeLibraryPage = null },
+                onItemClick = { item ->
+                    if (isRecentsPage && item.contentType == ContentType.LIVE) playItem(item)
+                    else openDetail(item)
+                },
+                onFavoriteClick = { toggleFavorite(it) },
+                onPlayClick = { item ->
+                    if (item.contentType == ContentType.SERIES) openDetail(item)
+                    else playItem(item)
+                },
+                onMoreClick = { cardMenuTarget = it },
+                onItemLongClick = if (isRecentsPage) {
+                    { item -> libraryRecentMenuTarget = item }
+                } else null,
+                onClearAllClick = if (isRecentsPage) {
+                    { clearRecents() }
+                } else null
+            )
+
+            libraryRecentMenuTarget?.let { target ->
+                com.aethertv.v2.ui.screens.RecentItemActionSheet(
+                    item = target,
+                    onDismiss = { libraryRecentMenuTarget = null },
+                    onResume = {
+                        libraryRecentMenuTarget = null
+                        if (target.contentType == ContentType.LIVE) playItem(target)
+                        else openDetail(target)
+                    },
+                    onRemove = {
+                        libraryRecentMenuTarget = null
+                        removeRecent(target)
+                    },
+                    onClearAll = {
+                        libraryRecentMenuTarget = null
+                        clearRecents()
+                    }
                 )
             }
         }

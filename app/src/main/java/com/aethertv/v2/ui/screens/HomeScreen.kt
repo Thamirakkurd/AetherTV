@@ -118,6 +118,8 @@ fun HomeScreen(
     onPlayClick: (MediaItem) -> Unit,
     onMoreClick: (MediaItem) -> Unit = onItemClick,
     onAddPlaylistClick: () -> Unit,
+    onOpenFavoritesPage: () -> Unit = {},
+    onOpenRecentsPage: () -> Unit = {},
     onRemoveRecent: (MediaItem) -> Unit = {},
     onClearRecents: () -> Unit = {}
 ) {
@@ -205,13 +207,16 @@ fun HomeScreen(
 
                 item(key = "favorites_shelf") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Text-only clickable header — no extra icons or badges
                         Text(
                             text = "Movies & Series Favorites",
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = (-0.3).sp,
                             color = MatteGlassTokens.CharcoalPrimary,
-                            modifier = Modifier.padding(horizontal = 12.dp)
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp)
+                                .livelyPress(pressedScale = 0.97f, depthShiftPx = 1.5f, onClick = onOpenFavoritesPage)
                         )
 
                         if (favoriteMedia.isEmpty()) {
@@ -277,8 +282,11 @@ fun HomeScreen(
 
                 item(key = "recents_shelf") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Clicking Recently Watched opens the dedicated Recently Watched page
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp),
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp)
+                                .livelyPress(pressedScale = 0.97f, depthShiftPx = 1.5f, onClick = onOpenRecentsPage),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
@@ -291,7 +299,7 @@ fun HomeScreen(
                             Spacer(Modifier.width(2.dp))
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = null,
+                                contentDescription = "View all recently watched",
                                 tint = MatteGlassTokens.CharcoalPrimary,
                                 modifier = Modifier.size(26.dp)
                             )
@@ -405,148 +413,165 @@ fun HomeScreen(
             modifier = Modifier.align(Alignment.TopCenter)
         )
 
-        // Long-press action sheet for Recently Watched items
         recentMenuTarget?.let { target ->
-            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-            ModalBottomSheet(
-                onDismissRequest = { recentMenuTarget = null },
-                sheetState = sheetState,
-                containerColor = MatteGlassTokens.SheetBg,
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+            RecentItemActionSheet(
+                item = target,
+                onDismiss = { recentMenuTarget = null },
+                onResume = {
+                    recentMenuTarget = null
+                    if (target.contentType == ContentType.LIVE) onPlayClick(target)
+                    else onItemClick(target)
+                },
+                onRemove = {
+                    recentMenuTarget = null
+                    onRemoveRecent(target)
+                },
+                onClearAll = {
+                    recentMenuTarget = null
+                    onClearRecents()
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RecentItemActionSheet(
+    item: MediaItem,
+    onDismiss: () -> Unit,
+    onResume: () -> Unit,
+    onRemove: () -> Unit,
+    onClearAll: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MatteGlassTokens.SheetBg,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 18.dp)
+                .padding(bottom = 18.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 18.dp)
-                        .padding(bottom = 18.dp)
+                        .size(width = 48.dp, height = 64.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF1E222A))
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 48.dp, height = 64.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF1E222A))
-                        ) {
-                            if (!target.posterUrl.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = target.posterUrl,
-                                    contentDescription = target.name,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = target.name,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MatteGlassTokens.CharcoalPrimary,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (target.group.isNotBlank()) {
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    text = target.group,
-                                    fontSize = 12.5.sp,
-                                    color = MatteGlassTokens.CharcoalMuted,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f) {
-                                recentMenuTarget = null
-                                if (target.contentType == ContentType.LIVE) onPlayClick(target)
-                                else onItemClick(target)
-                            }
-                            .padding(horizontal = 4.dp, vertical = 15.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.PlayArrow,
-                            contentDescription = "Resume",
-                            tint = MatteGlassTokens.CharcoalPrimary,
-                            modifier = Modifier.size(25.dp)
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Text(
-                            text = if (target.contentType == ContentType.LIVE) "Watch Live" else "Open & Resume",
-                            fontSize = 15.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MatteGlassTokens.CharcoalPrimary
-                        )
-                    }
-
-                    HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f) {
-                                recentMenuTarget = null
-                                onRemoveRecent(target)
-                            }
-                            .padding(horizontal = 4.dp, vertical = 15.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.DeleteOutline,
-                            contentDescription = "Remove from Recently Watched",
-                            tint = MatteGlassTokens.NotificationDot,
-                            modifier = Modifier.size(25.dp)
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Text(
-                            text = "Remove from Recently Watched",
-                            fontSize = 15.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MatteGlassTokens.NotificationDot
-                        )
-                    }
-
-                    HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f) {
-                                recentMenuTarget = null
-                                onClearRecents()
-                            }
-                            .padding(horizontal = 4.dp, vertical = 15.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.DeleteSweep,
-                            contentDescription = "Clear All Recently Watched",
-                            tint = MatteGlassTokens.NotificationDot,
-                            modifier = Modifier.size(25.dp)
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Text(
-                            text = "Clear All Recently Watched",
-                            fontSize = 15.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MatteGlassTokens.NotificationDot
+                    if (!item.posterUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = item.posterUrl,
+                            contentDescription = item.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.name,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MatteGlassTokens.CharcoalPrimary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (item.group.isNotBlank()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = item.group,
+                            fontSize = 12.5.sp,
+                            color = MatteGlassTokens.CharcoalMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f, onClick = onResume)
+                    .padding(horizontal = 4.dp, vertical = 15.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.PlayArrow,
+                    contentDescription = "Resume",
+                    tint = MatteGlassTokens.CharcoalPrimary,
+                    modifier = Modifier.size(25.dp)
+                )
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    text = if (item.contentType == ContentType.LIVE) "Watch Live" else "Open & Resume",
+                    fontSize = 15.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MatteGlassTokens.CharcoalPrimary
+                )
+            }
+
+            HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f, onClick = onRemove)
+                    .padding(horizontal = 4.dp, vertical = 15.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.DeleteOutline,
+                    contentDescription = "Remove from Recently Watched",
+                    tint = MatteGlassTokens.NotificationDot,
+                    modifier = Modifier.size(25.dp)
+                )
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    text = "Remove from Recently Watched",
+                    fontSize = 15.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MatteGlassTokens.NotificationDot
+                )
+            }
+
+            HorizontalDivider(thickness = 0.5.dp, color = MatteGlassTokens.HairlineDivider)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f, onClick = onClearAll)
+                    .padding(horizontal = 4.dp, vertical = 15.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.DeleteSweep,
+                    contentDescription = "Clear All Recently Watched",
+                    tint = MatteGlassTokens.NotificationDot,
+                    modifier = Modifier.size(25.dp)
+                )
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    text = "Clear All Recently Watched",
+                    fontSize = 15.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MatteGlassTokens.NotificationDot
+                )
             }
         }
     }

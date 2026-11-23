@@ -7,7 +7,9 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -526,6 +528,7 @@ private fun Modifier.tripleHairlinePortraitFrame(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PosterMediaCard(
     item: MediaItem,
@@ -534,6 +537,7 @@ fun PosterMediaCard(
     onFavoriteClick: () -> Unit,
     onPlayClick: () -> Unit,
     onMoreClick: () -> Unit = onCardClick,
+    onLongClick: (() -> Unit)? = null,
     isLarge: Boolean = false,
     modifier: Modifier = Modifier,
     gridIndex: Int = 0,
@@ -609,10 +613,11 @@ fun PosterMediaCard(
                 shadowElevation = if (active) 20f else 0f
             }
             .tripleHairlinePortraitFrame(isDark = isDark, isActive = active)
-            .clickable(
+            .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onCardClick
+                onClick = onCardClick,
+                onLongClick = onLongClick
             )
             .padding(LiquidGlassTokens.CardFrameInset)
     ) {
