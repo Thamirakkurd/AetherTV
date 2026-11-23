@@ -30,6 +30,7 @@ import com.aethertv.v2.ui.components.LocalGridSpringPhysics
 import com.aethertv.v2.ui.components.PosterMediaCard
 import com.aethertv.v2.ui.components.UnifiedMediaTopBar
 import com.aethertv.v2.ui.components.rememberGridSpringPhysicsState
+import com.aethertv.v2.ui.theme.LiquidGlassTokens
 import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 import dev.chrisbanes.haze.hazeSource
@@ -95,13 +96,13 @@ fun MediaGridScreen(
                             .fillMaxSize()
                             .nestedScroll(physicsState.nestedScrollConnection),
                         contentPadding = PaddingValues(
-                            start = 2.dp,
-                            end = 2.dp,
-                            top = topInset + 74.dp,
+                            start = LiquidGlassTokens.GridHorizontalEdgePadding,
+                            end = LiquidGlassTokens.GridHorizontalEdgePadding,
+                            top = topInset + 72.dp,
                             bottom = navInset + 96.dp + extraBottomPadding
                         ),
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                        horizontalArrangement = Arrangement.spacedBy(LiquidGlassTokens.GridCellSpacing),
+                        verticalArrangement = Arrangement.spacedBy(LiquidGlassTokens.GridCellSpacing)
                     ) {
                         itemsIndexed(
                             items = items,

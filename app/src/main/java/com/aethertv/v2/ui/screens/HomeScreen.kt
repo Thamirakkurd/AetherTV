@@ -64,21 +64,22 @@ private fun Modifier.recentTripleHairlineFrame(
 ): Modifier = this.drawWithCache {
     val strokePx = LiquidGlassTokens.FrameLineThickness.toPx().coerceAtLeast(1f)
     val gapPx = LiquidGlassTokens.FrameLineGap.toPx()
-    val outerRadiusPx = 8.dp.toPx()
+    val outerRadiusPx = LiquidGlassTokens.FrameOuterCornerRadius.toPx()
+    val radiusStepPx = 0.5.dp.toPx()
     val stroke = Stroke(width = strokePx)
-    val boost = if (isActive) 1.85f else 1f
+    val boost = if (isActive) 1.75f else 1f
     val baseColor = if (isDark) Color.White else Color(0xFF14161A)
     val ringColors = listOf(
-        baseColor.copy(alpha = (0.09f * boost).coerceAtMost(0.38f)),
-        baseColor.copy(alpha = (0.14f * boost).coerceAtMost(0.52f)),
-        baseColor.copy(alpha = (0.21f * boost).coerceAtMost(0.68f))
+        baseColor.copy(alpha = (0.12f * boost).coerceAtMost(0.42f)),
+        baseColor.copy(alpha = (0.19f * boost).coerceAtMost(0.56f)),
+        baseColor.copy(alpha = (0.28f * boost).coerceAtMost(0.72f))
     )
 
     onDrawWithContent {
         drawContent()
         for (ring in 0 until 3) {
             val inset = ring * (strokePx + gapPx) + (strokePx / 2f)
-            val radius = (outerRadiusPx - inset * 0.65f).coerceAtLeast(2f)
+            val radius = (outerRadiusPx - (ring * radiusStepPx)).coerceAtLeast(1.5f)
             drawRoundRect(
                 color = ringColors[ring],
                 topLeft = Offset(inset, inset),
@@ -215,8 +216,8 @@ fun HomeScreen(
                         } else {
                             LazyRow(
                                 modifier = Modifier.nestedScroll(physicsState.nestedScrollConnection),
-                                contentPadding = PaddingValues(horizontal = 3.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                contentPadding = PaddingValues(horizontal = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 itemsIndexed(
                                     items = favoriteMedia,
@@ -287,11 +288,10 @@ fun HomeScreen(
                                 modifier = Modifier.padding(horizontal = 12.dp)
                             )
                         } else {
-                            val frameInset = (LiquidGlassTokens.FrameLineThickness + LiquidGlassTokens.FrameLineGap) * 3
                             LazyRow(
                                 modifier = Modifier.nestedScroll(physicsState.nestedScrollConnection),
-                                contentPadding = PaddingValues(horizontal = 3.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                contentPadding = PaddingValues(horizontal = 2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 itemsIndexed(
                                     items = recentlyWatched,
@@ -306,7 +306,7 @@ fun HomeScreen(
                                         label = "recentPop"
                                     )
                                     val stagger = 1f + ((index % 3) * 0.14f)
-                                    val thumbShape = RoundedCornerShape(5.dp)
+                                    val thumbShape = RoundedCornerShape(LiquidGlassTokens.CardCornerRadius)
                                     val thumbReq = remember(item.posterUrl) {
                                         item.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
                                             ImageRequest.Builder(context)
@@ -342,7 +342,7 @@ fun HomeScreen(
                                                 .fillMaxWidth()
                                                 .height(172.dp)
                                                 .recentTripleHairlineFrame(isDark = isDark, isActive = pressed)
-                                                .padding(frameInset)
+                                                .padding(LiquidGlassTokens.CardFrameInset)
                                                 .clip(thumbShape)
                                                 .background(LiquidGlassTokens.GlassFillDark)
                                                 .background(LiquidGlassTokens.InnerGlowBrush)

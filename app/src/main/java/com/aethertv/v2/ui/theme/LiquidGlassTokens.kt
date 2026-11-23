@@ -14,13 +14,15 @@ object LiquidGlassTokens {
     val MediaCardOverlayIconSize = 14.dp
 
     // --- Edge-to-Edge Grid Spacing ---
-    val GridHorizontalEdgePadding = 3.dp
-    val GridCellSpacing = 4.dp
+    val GridHorizontalEdgePadding = 1.dp
+    val GridCellSpacing = 0.5.dp
 
     // --- Triple-Line Ultra-Thin Portrait Frame ---
-    val CardCornerRadius = 10.dp
-    val FrameLineThickness = 0.5.dp
-    val FrameLineGap = 1.25.dp
+    val CardCornerRadius = 3.dp
+    val FrameOuterCornerRadius = 4.5.dp
+    val FrameLineThickness = 0.35.dp
+    val FrameLineGap = 0.35.dp
+    val CardFrameInset = 2.2.dp
 
     // --- Top Header ---
     val TopHeaderHeight = 76.dp

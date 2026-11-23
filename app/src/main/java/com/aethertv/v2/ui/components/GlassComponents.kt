@@ -68,9 +68,6 @@ import com.aethertv.v2.ui.theme.livelyPress
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/**
- * Provides grid-wide connected spring physics to PosterMediaCard without breaking existing callers.
- */
 val LocalGridSpringPhysics = compositionLocalOf<GridSpringPhysicsState?> { null }
 
 data class NavTabItem(
@@ -80,7 +77,7 @@ data class NavTabItem(
 )
 
 private val NavFieldShape = RoundedCornerShape(22.dp)
-private val CardInnerShape = RoundedCornerShape(6.dp)
+private val CardInnerShape = RoundedCornerShape(LiquidGlassTokens.CardCornerRadius)
 private val CardGlassTintBrush = Brush.verticalGradient(
     listOf(Color(0x331E2636), Color(0x550B0E15))
 )
@@ -137,7 +134,6 @@ fun FloatingGlassNavBar(
             val clampedPos = pagePosition.coerceIn(0f, (count - 1).toFloat())
             val fractional = abs(clampedPos - clampedPos.roundToInt())
 
-            // GPU-driven Liquid Glass sliding pill with organic velocity stretch
             Box(
                 modifier = Modifier
                     .width(tabWidth)
@@ -185,7 +181,7 @@ fun FloatingGlassNavBar(
                             contentDescription = item.label,
                             tint = tint,
                             modifier = Modifier
-                                .size(26.dp) // Scaled up app-wide icon
+                                .size(26.dp)
                                 .graphicsLayer {
                                     scaleX = iconScale
                                     scaleY = iconScale
@@ -219,7 +215,7 @@ fun GlassCircleActionButton(
 
     Box(
         modifier = modifier
-            .size(48.dp) // Scaled up touch target
+            .size(48.dp)
             .livelyPress(pressedScale = 0.91f, depthShiftPx = 2f, onClick = onClick)
             .clip(CircleShape)
             .background(bg)
@@ -231,7 +227,7 @@ fun GlassCircleActionButton(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = MatteGlassTokens.CharcoalPrimary,
-            modifier = Modifier.size(25.dp) // Scaled up app-wide icon
+            modifier = Modifier.size(25.dp)
         )
     }
 }
@@ -289,7 +285,7 @@ fun SimpleScreenHeader(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Add Server",
                         tint = MatteGlassTokens.CharcoalPrimary,
-                        modifier = Modifier.size(26.dp) // Scaled up app-wide icon
+                        modifier = Modifier.size(26.dp)
                     )
                 }
             }
@@ -343,7 +339,7 @@ fun UnifiedMediaTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .height(68.dp) // Larger, stronger top header presence
+                .height(68.dp)
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -363,7 +359,7 @@ fun UnifiedMediaTopBar(
                     imageVector = Icons.Default.Search,
                     contentDescription = "Search",
                     tint = MatteGlassTokens.CharcoalMuted,
-                    modifier = Modifier.size(23.dp) // Scaled up app-wide icon
+                    modifier = Modifier.size(23.dp)
                 )
                 Spacer(Modifier.width(9.dp))
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
@@ -426,7 +422,7 @@ fun UnifiedMediaTopBar(
                             imageVector = Icons.Default.KeyboardArrowDown,
                             contentDescription = "Categories",
                             tint = MatteGlassTokens.CharcoalPrimary,
-                            modifier = Modifier.size(22.dp) // Scaled up app-wide icon
+                            modifier = Modifier.size(22.dp)
                         )
                     }
 
@@ -504,7 +500,7 @@ fun UnifiedMediaTopBar(
                     imageVector = if (isFavorites) Icons.Default.Star else Icons.Default.StarBorder,
                     contentDescription = "Favorites",
                     tint = if (isFavorites) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
-                    modifier = Modifier.size(24.dp) // Scaled up app-wide icon
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
@@ -513,8 +509,7 @@ fun UnifiedMediaTopBar(
 }
 
 /**
- * Draws the custom 3-line ultra-thin, tightly spaced concentric portrait frame.
- * Pre-computes strokes and radii inside drawWithCache for zero per-frame allocation.
+ * Tight, razor-sharp 3-line hairline portrait frame (4.5dp -> 4.0dp -> 3.5dp concentric with 3.0dp poster).
  */
 private fun Modifier.tripleHairlinePortraitFrame(
     isDark: Boolean,
@@ -522,22 +517,23 @@ private fun Modifier.tripleHairlinePortraitFrame(
 ): Modifier = this.drawWithCache {
     val strokePx = LiquidGlassTokens.FrameLineThickness.toPx().coerceAtLeast(1f)
     val gapPx = LiquidGlassTokens.FrameLineGap.toPx()
-    val outerRadiusPx = 9.dp.toPx()
+    val outerRadiusPx = LiquidGlassTokens.FrameOuterCornerRadius.toPx()
+    val radiusStepPx = 0.5.dp.toPx()
     val stroke = Stroke(width = strokePx)
 
-    val boost = if (isActive) 1.85f else 1f
+    val boost = if (isActive) 1.75f else 1f
     val baseColor = if (isDark) Color.White else Color(0xFF14161A)
     val ringColors = listOf(
-        baseColor.copy(alpha = (0.09f * boost).coerceAtMost(0.38f)), // Outer hairline
-        baseColor.copy(alpha = (0.14f * boost).coerceAtMost(0.52f)), // Middle hairline
-        baseColor.copy(alpha = (0.21f * boost).coerceAtMost(0.68f))  // Inner hairline
+        baseColor.copy(alpha = (0.12f * boost).coerceAtMost(0.42f)), // Outer hairline
+        baseColor.copy(alpha = (0.19f * boost).coerceAtMost(0.56f)), // Middle hairline
+        baseColor.copy(alpha = (0.28f * boost).coerceAtMost(0.72f))  // Inner hairline
     )
 
     onDrawWithContent {
         drawContent()
         for (ring in 0 until 3) {
             val inset = ring * (strokePx + gapPx) + (strokePx / 2f)
-            val radius = (outerRadiusPx - inset * 0.65f).coerceAtLeast(2f)
+            val radius = (outerRadiusPx - (ring * radiusStepPx)).coerceAtLeast(1.5f)
             drawRoundRect(
                 color = ringColors[ring],
                 topLeft = Offset(inset, inset),
@@ -570,7 +566,6 @@ fun PosterMediaCard(
     val physicsState = LocalGridSpringPhysics.current
     val isDark = MatteGlassTokens.isDark
 
-    // Tactile selection POP (expand & lift forward on GPU)
     val popScale by animateFloatAsState(
         targetValue = when {
             pressed -> 1.045f
@@ -607,7 +602,7 @@ fun PosterMediaCard(
         item.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
             ImageRequest.Builder(context)
                 .data(url)
-                .allowHardware(true) // Direct GPU texture upload
+                .allowHardware(true)
                 .crossfade(120)
                 .size(if (isLarge) 540 else 360, if (isLarge) 780 else 540)
                 .build()
@@ -616,7 +611,6 @@ fun PosterMediaCard(
 
     val col = gridIndex % gridColumns.coerceAtLeast(1)
     val staggerFactor = 1f + (col * 0.14f)
-    val frameInset = (LiquidGlassTokens.FrameLineThickness + LiquidGlassTokens.FrameLineGap) * 3
 
     Box(
         modifier = modifier
@@ -640,7 +634,7 @@ fun PosterMediaCard(
                 indication = null,
                 onClick = onCardClick
             )
-            .padding(frameInset)
+            .padding(LiquidGlassTokens.CardFrameInset)
     ) {
         Box(
             modifier = Modifier
@@ -658,7 +652,6 @@ fun PosterMediaCard(
                 )
             }
 
-            // Bottom readability scrim
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -667,7 +660,6 @@ fun PosterMediaCard(
                     .background(CardScrimBrush)
             )
 
-            // Subtle inner glass glow & active glint
             if (pressGlintAlpha > 0.001f) {
                 Box(
                     modifier = Modifier
@@ -676,7 +668,7 @@ fun PosterMediaCard(
                 )
             }
 
-            // STRICT EXCEPTION: Media card overlay icons remain at original size
+            // STRICT EXCEPTION: Media card overlay icons remain untouched at original size
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -747,7 +739,6 @@ fun PosterMediaCard(
     }
 }
 
-// UNCHANGED: Keeps the 3 media card overlay icons at their exact finalized size (32.dp / 17.dp)
 @Composable
 private fun CardGlassCircleIcon(
     icon: ImageVector,
@@ -934,7 +925,7 @@ private fun ActionSheetRow(
             imageVector = icon,
             contentDescription = label,
             tint = MatteGlassTokens.CharcoalPrimary,
-            modifier = Modifier.size(25.dp) // Scaled up app-wide icon
+            modifier = Modifier.size(25.dp)
         )
         Spacer(Modifier.width(14.dp))
         Text(
