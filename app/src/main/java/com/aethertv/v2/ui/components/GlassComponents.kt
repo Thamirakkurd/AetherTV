@@ -1,6 +1,7 @@
 package com.aethertv.v2.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -9,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -33,31 +35,43 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import kotlin.math.roundToInt
-import kotlin.math.abs
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.aethertv.v2.data.ContentType
 import com.aethertv.v2.data.MediaItem
+import com.aethertv.v2.ui.theme.LiquidGlassTokens
 import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 import com.aethertv.v2.ui.theme.liquidGlassSurface
 import com.aethertv.v2.ui.theme.livelyPress
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+/**
+ * Provides grid-wide connected spring physics to PosterMediaCard without breaking existing callers.
+ */
+val LocalGridSpringPhysics = compositionLocalOf<GridSpringPhysicsState?> { null }
 
 data class NavTabItem(
     val label: String,
@@ -65,9 +79,11 @@ data class NavTabItem(
     val unselectedIcon: ImageVector = selectedIcon
 )
 
-private val NavFieldShape = RoundedCornerShape(18.dp)
-private val CardShape = RoundedCornerShape(4.dp)
-private val CardBgBrush = Brush.verticalGradient(listOf(Color(0xFF232833), Color(0xFF11141B)))
+private val NavFieldShape = RoundedCornerShape(22.dp)
+private val CardInnerShape = RoundedCornerShape(6.dp)
+private val CardGlassTintBrush = Brush.verticalGradient(
+    listOf(Color(0x331E2636), Color(0x550B0E15))
+)
 private val CardScrimBrush = Brush.verticalGradient(
     colors = listOf(Color.Transparent, Color(0x88090B10), Color(0xEB07090D))
 )
@@ -83,35 +99,36 @@ fun FloatingGlassNavBar(
 ) {
     val hazeState = LocalHazeState.current
     val density = LocalDensity.current
-    val capsuleShape = RoundedCornerShape(30.dp)
-    val activePillShape = RoundedCornerShape(22.dp)
+    val capsuleShape = RoundedCornerShape(34.dp)
+    val activePillShape = RoundedCornerShape(26.dp)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(60.dp)
+                .height(68.dp)
                 .shadow(
-                    elevation = if (MatteGlassTokens.isDark) 16.dp else 11.dp,
+                    elevation = if (MatteGlassTokens.isDark) 18.dp else 12.dp,
                     shape = capsuleShape,
-                    ambientColor = Color.Black.copy(alpha = 0.30f),
-                    spotColor = Color.Black.copy(alpha = 0.26f)
+                    ambientColor = Color.Black.copy(alpha = 0.32f),
+                    spotColor = Color.Black.copy(alpha = 0.28f)
                 )
                 .liquidGlassSurface(
                     hazeState = hazeState,
                     shape = capsuleShape,
                     tintColor = MatteGlassTokens.NavGlassBg,
                     fallbackColor = MatteGlassTokens.NavGlassFallback,
-                    blurRadius = 32.dp,
+                    blurRadius = 34.dp,
                     borderWidth = 1.dp,
                     borderBrush = MatteGlassTokens.SpecularBorderBrush
                 )
+                .background(LiquidGlassTokens.InnerGlowBrush)
                 .padding(horizontal = 6.dp, vertical = 5.dp)
         ) {
             val count = items.size.coerceAtLeast(1)
@@ -132,6 +149,7 @@ fun FloatingGlassNavBar(
                     }
                     .clip(activePillShape)
                     .background(MatteGlassTokens.ActivePillBg)
+                    .background(LiquidGlassTokens.InnerGlowBrush)
                     .border(0.95.dp, MatteGlassTokens.SpecularBorderBrush, activePillShape)
             )
 
@@ -148,8 +166,8 @@ fun FloatingGlassNavBar(
                         label = "navTint"
                     )
                     val iconScale by animateFloatAsState(
-                        targetValue = if (selected) 1.09f else 0.95f,
-                        animationSpec = spring(dampingRatio = 0.52f, stiffness = 460f),
+                        targetValue = if (selected) 1.10f else 0.96f,
+                        animationSpec = spring(dampingRatio = 0.55f, stiffness = 440f),
                         label = "navScale"
                     )
 
@@ -167,16 +185,16 @@ fun FloatingGlassNavBar(
                             contentDescription = item.label,
                             tint = tint,
                             modifier = Modifier
-                                .size(21.dp)
+                                .size(26.dp) // Scaled up app-wide icon
                                 .graphicsLayer {
                                     scaleX = iconScale
                                     scaleY = iconScale
                                 }
                         )
-                        Spacer(Modifier.height(1.dp))
+                        Spacer(Modifier.height(2.dp))
                         Text(
                             text = item.label,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                             color = tint,
                             maxLines = 1,
@@ -196,15 +214,16 @@ fun GlassCircleActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (MatteGlassTokens.isDark) Color(0xB3121722) else Color(0xD9FFFFFF)
-    val rim = if (MatteGlassTokens.isDark) Color.White.copy(alpha = 0.28f) else MatteGlassTokens.GlassNavBorder
+    val bg = if (MatteGlassTokens.isDark) Color(0x52121824) else Color(0x99FFFFFF)
+    val rim = if (MatteGlassTokens.isDark) Color.White.copy(alpha = 0.30f) else MatteGlassTokens.GlassNavBorder
 
     Box(
         modifier = modifier
-            .size(42.dp)
+            .size(48.dp) // Scaled up touch target
             .livelyPress(pressedScale = 0.91f, depthShiftPx = 2f, onClick = onClick)
             .clip(CircleShape)
             .background(bg)
+            .background(LiquidGlassTokens.InnerGlowBrush)
             .border(BorderStroke(0.9.dp, rim), CircleShape),
         contentAlignment = Alignment.Center
     ) {
@@ -212,7 +231,7 @@ fun GlassCircleActionButton(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = MatteGlassTokens.CharcoalPrimary,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(25.dp) // Scaled up app-wide icon
         )
     }
 }
@@ -233,41 +252,44 @@ fun SimpleScreenHeader(
                 shape = RectangleShape,
                 tintColor = MatteGlassTokens.NavGlassBg,
                 fallbackColor = MatteGlassTokens.NavGlassFallback,
-                blurRadius = 32.dp,
+                blurRadius = 34.dp,
                 borderWidth = 0.dp,
                 borderBrush = null
             )
+            .background(LiquidGlassTokens.InnerGlowBrush)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .heightIn(min = 68.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = title,
-                fontSize = 24.sp,
+                fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.4).sp,
+                letterSpacing = (-0.5).sp,
                 color = MatteGlassTokens.CharcoalPrimary
             )
             if (onAddClick != null) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(46.dp)
                         .livelyPress(pressedScale = 0.90f, depthShiftPx = 2f, onClick = onAddClick)
                         .clip(CircleShape)
                         .background(MatteGlassTokens.FieldGlassBg)
-                        .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape),
+                        .background(LiquidGlassTokens.InnerGlowBrush)
+                        .border(0.9.dp, MatteGlassTokens.SpecularBorderBrush, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Add Server",
                         tint = MatteGlassTokens.CharcoalPrimary,
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(26.dp) // Scaled up app-wide icon
                     )
                 }
             }
@@ -311,42 +333,44 @@ fun UnifiedMediaTopBar(
                 shape = RectangleShape,
                 tintColor = MatteGlassTokens.NavGlassBg,
                 fallbackColor = MatteGlassTokens.NavGlassFallback,
-                blurRadius = 32.dp,
+                blurRadius = 34.dp,
                 borderWidth = 0.dp,
                 borderBrush = null
             )
+            .background(LiquidGlassTokens.InnerGlowBrush)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .height(54.dp)
-                .padding(horizontal = 12.dp),
+                .height(68.dp) // Larger, stronger top header presence
+                .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .height(38.dp)
+                    .height(48.dp)
                     .clip(NavFieldShape)
                     .background(MatteGlassTokens.FieldGlassBg)
-                    .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, NavFieldShape)
-                    .padding(horizontal = 12.dp),
+                    .background(LiquidGlassTokens.InnerGlowBrush)
+                    .border(0.9.dp, MatteGlassTokens.SpecularBorderBrush, NavFieldShape)
+                    .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = "Search",
                     tint = MatteGlassTokens.CharcoalMuted,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(23.dp) // Scaled up app-wide icon
                 )
-                Spacer(Modifier.width(7.dp))
+                Spacer(Modifier.width(9.dp))
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     if (searchQuery.isEmpty()) {
                         Text(
                             text = searchPlaceholder,
-                            fontSize = 13.sp,
+                            fontSize = 14.5.sp,
                             color = MatteGlassTokens.CharcoalMuted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -356,7 +380,7 @@ fun UnifiedMediaTopBar(
                         value = searchQuery,
                         onValueChange = onSearchQueryChange,
                         singleLine = true,
-                        textStyle = TextStyle(fontSize = 13.sp, color = MatteGlassTokens.CharcoalPrimary),
+                        textStyle = TextStyle(fontSize = 14.5.sp, color = MatteGlassTokens.CharcoalPrimary),
                         cursorBrush = SolidColor(MatteGlassTokens.CharcoalPrimary),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -367,7 +391,7 @@ fun UnifiedMediaTopBar(
                         contentDescription = "Clear search",
                         tint = MatteGlassTokens.CharcoalMuted,
                         modifier = Modifier
-                            .size(17.dp)
+                            .size(22.dp)
                             .clip(CircleShape)
                             .clickable { onSearchQueryChange("") }
                     )
@@ -378,30 +402,31 @@ fun UnifiedMediaTopBar(
                 Box {
                     Row(
                         modifier = Modifier
-                            .height(38.dp)
-                            .widthIn(max = 136.dp)
+                            .height(48.dp)
+                            .widthIn(max = 146.dp)
                             .livelyPress(pressedScale = 0.94f, depthShiftPx = 2f) { menuExpanded = true }
                             .clip(NavFieldShape)
                             .background(MatteGlassTokens.FieldGlassBg)
-                            .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, NavFieldShape)
-                            .padding(horizontal = 10.dp),
+                            .background(LiquidGlassTokens.InnerGlowBrush)
+                            .border(0.9.dp, MatteGlassTokens.SpecularBorderBrush, NavFieldShape)
+                            .padding(horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = displayCategory,
-                            fontSize = 12.sp,
+                            fontSize = 13.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MatteGlassTokens.CharcoalPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
                         )
-                        Spacer(Modifier.width(2.dp))
+                        Spacer(Modifier.width(3.dp))
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowDown,
                             contentDescription = "Categories",
                             tint = MatteGlassTokens.CharcoalPrimary,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(22.dp) // Scaled up app-wide icon
                         )
                     }
 
@@ -410,7 +435,7 @@ fun UnifiedMediaTopBar(
                         onDismissRequest = { menuExpanded = false },
                         modifier = Modifier
                             .background(MatteGlassTokens.SheetBg)
-                            .widthIn(min = 190.dp, max = 280.dp)
+                            .widthIn(min = 200.dp, max = 290.dp)
                             .heightIn(max = 420.dp)
                     ) {
                         categories.forEach { cat ->
@@ -424,7 +449,7 @@ fun UnifiedMediaTopBar(
                                     ) {
                                         Text(
                                             text = cat,
-                                            fontSize = 13.sp,
+                                            fontSize = 14.sp,
                                             fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                                             color = MatteGlassTokens.CharcoalPrimary,
                                             maxLines = 1,
@@ -437,7 +462,7 @@ fun UnifiedMediaTopBar(
                                                 imageVector = Icons.Default.Check,
                                                 contentDescription = null,
                                                 tint = MatteGlassTokens.CharcoalPrimary,
-                                                modifier = Modifier.size(16.dp)
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     }
@@ -454,7 +479,7 @@ fun UnifiedMediaTopBar(
 
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(48.dp)
                     .livelyPress(pressedScale = 0.90f, depthShiftPx = 2f) {
                         if (isFavorites) {
                             val fallback = lastNonFavCategory.ifBlank {
@@ -469,7 +494,7 @@ fun UnifiedMediaTopBar(
                     .clip(CircleShape)
                     .background(if (isFavorites) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.FieldGlassBg)
                     .border(
-                        0.85.dp,
+                        0.9.dp,
                         if (isFavorites) SolidColor(MatteGlassTokens.CharcoalPrimary) else MatteGlassTokens.SpecularBorderBrush,
                         CircleShape
                     ),
@@ -479,11 +504,48 @@ fun UnifiedMediaTopBar(
                     imageVector = if (isFavorites) Icons.Default.Star else Icons.Default.StarBorder,
                     contentDescription = "Favorites",
                     tint = if (isFavorites) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalPrimary,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(24.dp) // Scaled up app-wide icon
                 )
             }
         }
         HorizontalDivider(thickness = 0.75.dp, color = MatteGlassTokens.HairlineDivider)
+    }
+}
+
+/**
+ * Draws the custom 3-line ultra-thin, tightly spaced concentric portrait frame.
+ * Pre-computes strokes and radii inside drawWithCache for zero per-frame allocation.
+ */
+private fun Modifier.tripleHairlinePortraitFrame(
+    isDark: Boolean,
+    isActive: Boolean
+): Modifier = this.drawWithCache {
+    val strokePx = LiquidGlassTokens.FrameLineThickness.toPx().coerceAtLeast(1f)
+    val gapPx = LiquidGlassTokens.FrameLineGap.toPx()
+    val outerRadiusPx = 9.dp.toPx()
+    val stroke = Stroke(width = strokePx)
+
+    val boost = if (isActive) 1.85f else 1f
+    val baseColor = if (isDark) Color.White else Color(0xFF14161A)
+    val ringColors = listOf(
+        baseColor.copy(alpha = (0.09f * boost).coerceAtMost(0.38f)), // Outer hairline
+        baseColor.copy(alpha = (0.14f * boost).coerceAtMost(0.52f)), // Middle hairline
+        baseColor.copy(alpha = (0.21f * boost).coerceAtMost(0.68f))  // Inner hairline
+    )
+
+    onDrawWithContent {
+        drawContent()
+        for (ring in 0 until 3) {
+            val inset = ring * (strokePx + gapPx) + (strokePx / 2f)
+            val radius = (outerRadiusPx - inset * 0.65f).coerceAtLeast(2f)
+            drawRoundRect(
+                color = ringColors[ring],
+                topLeft = Offset(inset, inset),
+                size = Size(size.width - inset * 2f, size.height - inset * 2f),
+                cornerRadius = CornerRadius(radius, radius),
+                style = stroke
+            )
+        }
     }
 }
 
@@ -496,26 +558,36 @@ fun PosterMediaCard(
     onPlayClick: () -> Unit,
     onMoreClick: () -> Unit = onCardClick,
     isLarge: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    gridIndex: Int = 0,
+    gridColumns: Int = 3
 ) {
     val context = LocalContext.current
-    val density = LocalDensity.current
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
+    val focused by interactionSource.collectIsFocusedAsState()
+    val active = pressed || focused
+    val physicsState = LocalGridSpringPhysics.current
+    val isDark = MatteGlassTokens.isDark
 
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.956f else 1f,
-        animationSpec = spring(dampingRatio = 0.52f, stiffness = 420f),
-        label = "cardScale"
+    // Tactile selection POP (expand & lift forward on GPU)
+    val popScale by animateFloatAsState(
+        targetValue = when {
+            pressed -> 1.045f
+            focused -> 1.06f
+            else -> 1f
+        },
+        animationSpec = spring(dampingRatio = 0.60f, stiffness = Spring.StiffnessMediumLow),
+        label = "cardPopScale"
     )
-    val depthY by animateFloatAsState(
-        targetValue = if (pressed) 4f else 0f,
-        animationSpec = spring(dampingRatio = 0.56f, stiffness = 420f),
-        label = "cardDepth"
+    val popLiftY by animateFloatAsState(
+        targetValue = if (active) -7f else 0f,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow),
+        label = "cardPopLift"
     )
     val pressGlintAlpha by animateFloatAsState(
-        targetValue = if (pressed) 0.16f else 0f,
-        animationSpec = tween(130),
+        targetValue = if (active) 0.14f else 0f,
+        animationSpec = tween(110),
         label = "cardGlint"
     )
 
@@ -535,63 +607,47 @@ fun PosterMediaCard(
         item.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
             ImageRequest.Builder(context)
                 .data(url)
-                .crossfade(true)
-                .size(if (isLarge) 540 else 360, if (isLarge) 780 else 600)
+                .allowHardware(true) // Direct GPU texture upload
+                .crossfade(120)
+                .size(if (isLarge) 540 else 360, if (isLarge) 780 else 540)
                 .build()
         }
     }
 
-    val frameShape = RoundedCornerShape(6.dp)
-    val frameBg = if (MatteGlassTokens.isDark) Color(0x6B1C2638) else Color(0xEBFFFFFF)
-    val outerFrameBrush = if (MatteGlassTokens.isDark) {
-        Brush.linearGradient(
-            listOf(
-                Color.White.copy(alpha = 0.58f),
-                Color.White.copy(alpha = 0.24f),
-                Color.White.copy(alpha = 0.46f)
-            )
-        )
-    } else {
-        Brush.linearGradient(
-            listOf(
-                Color(0x8C14161A),
-                Color(0x4D14161A),
-                Color(0x7A14161A)
-            )
-        )
-    }
-    val innerPosterRim = if (MatteGlassTokens.isDark) Color.White.copy(alpha = 0.28f) else Color(0x3D14161A)
+    val col = gridIndex % gridColumns.coerceAtLeast(1)
+    val staggerFactor = 1f + (col * 0.14f)
+    val frameInset = (LiquidGlassTokens.FrameLineThickness + LiquidGlassTokens.FrameLineGap) * 3
 
     Box(
         modifier = modifier
+            .zIndex(if (active) 10f else 0f)
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                translationY = depthY
-                cameraDistance = 12f * density.density
+                val vImpulse = physicsState?.verticalImpulse?.value ?: 0f
+                val hImpulse = physicsState?.lateralImpulse?.value ?: 0f
+
+                scaleX = popScale
+                scaleY = popScale
+                translationY = popLiftY + (vImpulse * 13f * staggerFactor)
+                translationX = hImpulse * 9f * staggerFactor
+                cameraDistance = 16f * density
+                rotationX = (vImpulse * 3.0f).coerceIn(-4f, 4f)
+                rotationY = (-hImpulse * 2.8f).coerceIn(-4f, 4f)
+                shadowElevation = if (active) 22f else 0f
             }
-            .shadow(
-                elevation = if (MatteGlassTokens.isDark) 4.dp else 2.5.dp,
-                shape = frameShape,
-                ambientColor = Color.Black.copy(alpha = 0.24f),
-                spotColor = Color.Black.copy(alpha = 0.20f)
-            )
-            .clip(frameShape)
-            .background(frameBg)
-            .border(1.25.dp, outerFrameBrush, frameShape)
+            .tripleHairlinePortraitFrame(isDark = isDark, isActive = active)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onCardClick
             )
-            .padding(2.dp)
+            .padding(frameInset)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(CardShape)
-                .background(CardBgBrush)
-                .border(0.75.dp, innerPosterRim, CardShape)
+                .clip(CardInnerShape)
+                .background(CardGlassTintBrush)
+                .background(LiquidGlassTokens.InnerGlowBrush)
         ) {
             if (imageRequest != null) {
                 AsyncImage(
@@ -611,7 +667,7 @@ fun PosterMediaCard(
                     .background(CardScrimBrush)
             )
 
-            // Tactile glass glint on press
+            // Subtle inner glass glow & active glint
             if (pressGlintAlpha > 0.001f) {
                 Box(
                     modifier = Modifier
@@ -620,8 +676,11 @@ fun PosterMediaCard(
                 )
             }
 
+            // STRICT EXCEPTION: Media card overlay icons remain at original size
             Row(
-                modifier = Modifier.align(Alignment.TopEnd).padding(7.dp),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(7.dp),
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -688,6 +747,7 @@ fun PosterMediaCard(
     }
 }
 
+// UNCHANGED: Keeps the 3 media card overlay icons at their exact finalized size (32.dp / 17.dp)
 @Composable
 private fun CardGlassCircleIcon(
     icon: ImageVector,
@@ -730,7 +790,7 @@ fun MediaActionBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MatteGlassTokens.SheetBg,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
     ) {
         Column(
             modifier = Modifier
@@ -863,22 +923,23 @@ private fun ActionSheetRow(
         modifier = Modifier
             .fillMaxWidth()
             .livelyPress(pressedScale = 0.975f, depthShiftPx = 2f, onClick = onClick)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(MatteGlassTokens.CardGlassBg)
-            .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 13.dp),
+            .background(LiquidGlassTokens.InnerGlowBrush)
+            .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
+            .padding(horizontal = 15.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = MatteGlassTokens.CharcoalPrimary,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(25.dp) // Scaled up app-wide icon
         )
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(14.dp))
         Text(
             text = label,
-            fontSize = 14.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
             color = MatteGlassTokens.CharcoalPrimary
         )

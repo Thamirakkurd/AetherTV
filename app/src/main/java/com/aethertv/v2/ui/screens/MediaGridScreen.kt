@@ -1,7 +1,6 @@
 package com.aethertv.v2.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -13,19 +12,24 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aethertv.v2.data.MediaItem
+import com.aethertv.v2.ui.components.LocalGridSpringPhysics
 import com.aethertv.v2.ui.components.PosterMediaCard
 import com.aethertv.v2.ui.components.UnifiedMediaTopBar
+import com.aethertv.v2.ui.components.rememberGridSpringPhysicsState
 import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 import dev.chrisbanes.haze.hazeSource
@@ -51,8 +55,16 @@ fun MediaGridScreen(
     onMoreClick: (MediaItem) -> Unit = onItemClick
 ) {
     val hazeState = LocalHazeState.current
+    val physicsState = rememberGridSpringPhysicsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val columns = 2
+
+    LaunchedEffect(gridState.isScrollInProgress) {
+        if (!gridState.isScrollInProgress) {
+            physicsState.settle()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -75,32 +87,42 @@ fun MediaGridScreen(
                     )
                 }
             } else {
-                LazyVerticalGrid(
-                    state = gridState,
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 3.dp,
-                        end = 3.dp,
-                        top = topInset + 62.dp,
-                        bottom = navInset + 86.dp + extraBottomPadding
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    items(items, key = { it.id }, contentType = { "poster_card" }) { item ->
-                        PosterMediaCard(
-                            item = item,
-                            isFavorite = favoriteIds.contains(item.id),
-                            onCardClick = { onItemClick(item) },
-                            onFavoriteClick = { onFavoriteClick(item) },
-                            onPlayClick = { onPlayClick(item) },
-                            onMoreClick = { onMoreClick(item) },
-                            isLarge = false,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(0.56f)
-                        )
+                CompositionLocalProvider(LocalGridSpringPhysics provides physicsState) {
+                    LazyVerticalGrid(
+                        state = gridState,
+                        columns = GridCells.Fixed(columns),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .nestedScroll(physicsState.nestedScrollConnection),
+                        contentPadding = PaddingValues(
+                            start = 2.dp,
+                            end = 2.dp,
+                            top = topInset + 74.dp,
+                            bottom = navInset + 96.dp + extraBottomPadding
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        itemsIndexed(
+                            items = items,
+                            key = { _, item -> item.id },
+                            contentType = { _, _ -> "poster_card" }
+                        ) { index, item ->
+                            PosterMediaCard(
+                                item = item,
+                                isFavorite = favoriteIds.contains(item.id),
+                                onCardClick = { onItemClick(item) },
+                                onFavoriteClick = { onFavoriteClick(item) },
+                                onPlayClick = { onPlayClick(item) },
+                                onMoreClick = { onMoreClick(item) },
+                                isLarge = false,
+                                gridIndex = index,
+                                gridColumns = columns,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(0.56f)
+                            )
+                        }
                     }
                 }
             }

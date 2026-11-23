@@ -14,6 +14,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +44,7 @@ enum class AppThemeMode(val label: String) {
     DARK("Dark Liquid Glass")
 }
 
+@Immutable
 data class LiquidGlassPalette(
     val isDark: Boolean,
     val canvasBg: Color,
@@ -65,53 +67,78 @@ data class LiquidGlassPalette(
     val specularBottom: Color,
     val hairlineDivider: Color,
     val notificationDot: Color
-)
+) {
+    // Cached GPU brushes — allocated once per palette instead of per frame/recomposition
+    val ambientCanvasBrush: Brush = Brush.verticalGradient(
+        colors = listOf(canvasAccentTop, canvasBg, canvasAccentBottom)
+    )
+
+    val specularBorderBrush: Brush = Brush.verticalGradient(
+        colors = listOf(specularTop, neutralBorder, specularBottom)
+    )
+
+    val cardRimBrush: Brush = Brush.verticalGradient(
+        colors = listOf(
+            Color.White.copy(alpha = if (isDark) 0.34f else 0.58f),
+            Color.White.copy(alpha = if (isDark) 0.10f else 0.14f),
+            Color.Black.copy(alpha = if (isDark) 0.32f else 0.14f)
+        )
+    )
+
+    val innerGlowBrush: Brush = Brush.verticalGradient(
+        colors = listOf(
+            Color.White.copy(alpha = if (isDark) 0.11f else 0.42f),
+            Color.Transparent,
+            Color.Black.copy(alpha = if (isDark) 0.16f else 0.04f)
+        )
+    )
+}
 
 val LightLiquidPalette = LiquidGlassPalette(
     isDark = false,
-    canvasBg = Color(0xFFF6F8FB),
-    canvasAccentTop = Color(0xFFEAF0FA),
-    canvasAccentBottom = Color(0xFFF8F9FC),
-    subtleSurface = Color(0xFFF0F2F6),
-    primaryText = Color(0xFF14161A),
-    actionInk = Color(0xFF23272F),
-    mutedText = Color(0xFF555B66),
-    navGlassTint = Color(0x9EF4F6FA),
-    navGlassFallback = Color(0xECF4F6FA),
-    fieldGlassBg = Color(0x8CE3E8F0),
+    canvasBg = Color(0xFFF3F6FC),
+    canvasAccentTop = Color(0xFFE4ECFA),
+    canvasAccentBottom = Color(0xFFF7F9FD),
+    subtleSurface = Color(0x99EEF2F8),
+    primaryText = Color(0xFF12151C),
+    actionInk = Color(0xFF202530),
+    mutedText = Color(0xFF565E6B),
+    navGlassTint = Color(0x88F4F7FC),
+    navGlassFallback = Color(0xE6F4F7FC),
+    fieldGlassBg = Color(0x7AE1E7F2),
     activePillBg = Color(0xCCFFFFFF),
-    headerPillBg = Color(0xCCF1F4F8),
-    cardGlassBg = Color(0xD9FFFFFF),
-    sheetBg = Color(0xF0F4F6FA),
-    neutralBorder = Color(0xFFDDE2EB),
-    glassBorder = Color(0xFFCFD6E2),
-    specularTop = Color(0xF2FFFFFF),
-    specularBottom = Color(0x2814161A),
-    hairlineDivider = Color(0x2214161A),
+    headerPillBg = Color(0xBFF0F4FA),
+    cardGlassBg = Color(0xB8FFFFFF),
+    sheetBg = Color(0xECF3F6FB),
+    neutralBorder = Color(0x8CD5DCE8),
+    glassBorder = Color(0xB8CBD3E0),
+    specularTop = Color(0xF5FFFFFF),
+    specularBottom = Color(0x2614161A),
+    hairlineDivider = Color(0x1E14161A),
     notificationDot = Color(0xFFDC2626)
 )
 
 val DarkLiquidPalette = LiquidGlassPalette(
     isDark = true,
-    canvasBg = Color(0xFF070A0F),
-    canvasAccentTop = Color(0xFF131D30),
-    canvasAccentBottom = Color(0xFF090C12),
-    subtleSurface = Color(0xFF121722),
-    primaryText = Color(0xFFF4F6FA),
+    canvasBg = Color(0xFF06090F),
+    canvasAccentTop = Color(0xFF142138),
+    canvasAccentBottom = Color(0xFF080B12),
+    subtleSurface = Color(0x52161E2E),
+    primaryText = Color(0xFFF5F7FB),
     actionInk = Color(0xFFE2E8F0),
-    mutedText = Color(0xFF98A2B3),
-    navGlassTint = Color(0x940D121B),
-    navGlassFallback = Color(0xEC0D121B),
-    fieldGlassBg = Color(0x731C2434),
-    activePillBg = Color(0x40FFFFFF),
-    headerPillBg = Color(0xB3141A26),
-    cardGlassBg = Color(0xA6141A26),
-    sheetBg = Color(0xEE101520),
-    neutralBorder = Color(0x2EFFFFFF),
+    mutedText = Color(0xFF9AA5B8),
+    navGlassTint = Color(0x7A0C121D),
+    navGlassFallback = Color(0xE60C121D),
+    fieldGlassBg = Color(0x5C1D273B),
+    activePillBg = Color(0x38FFFFFF),
+    headerPillBg = Color(0x94141C2B),
+    cardGlassBg = Color(0x6E141C2B),
+    sheetBg = Color(0xE80F1522),
+    neutralBorder = Color(0x2BFFFFFF),
     glassBorder = Color(0x3DFFFFFF),
-    specularTop = Color(0x52FFFFFF),
+    specularTop = Color(0x58FFFFFF),
     specularBottom = Color(0x14FFFFFF),
-    hairlineDivider = Color(0x29FFFFFF),
+    hairlineDivider = Color(0x24FFFFFF),
     notificationDot = Color(0xFFF87171)
 )
 
@@ -140,32 +167,10 @@ object MatteGlassTokens {
     val HairlineDivider: Color get() = palette.hairlineDivider
     val NotificationDot: Color get() = palette.notificationDot
 
-    val AmbientCanvasBrush: Brush
-        get() = Brush.verticalGradient(
-            colors = listOf(
-                palette.canvasAccentTop,
-                palette.canvasBg,
-                palette.canvasAccentBottom
-            )
-        )
-
-    val SpecularBorderBrush: Brush
-        get() = Brush.verticalGradient(
-            colors = listOf(
-                palette.specularTop,
-                palette.neutralBorder,
-                palette.specularBottom
-            )
-        )
-
-    val CardRimBrush: Brush
-        get() = Brush.verticalGradient(
-            colors = listOf(
-                Color.White.copy(alpha = if (palette.isDark) 0.34f else 0.55f),
-                Color.White.copy(alpha = if (palette.isDark) 0.10f else 0.14f),
-                Color.Black.copy(alpha = if (palette.isDark) 0.35f else 0.16f)
-            )
-        )
+    val AmbientCanvasBrush: Brush get() = palette.ambientCanvasBrush
+    val SpecularBorderBrush: Brush get() = palette.specularBorderBrush
+    val CardRimBrush: Brush get() = palette.cardRimBrush
+    val InnerGlowBrush: Brush get() = palette.innerGlowBrush
 }
 
 fun matteGlassBorder(): BorderStroke = BorderStroke(
@@ -192,17 +197,21 @@ fun Modifier.liquidGlassSurface(
     blurRadius: Dp = 32.dp,
     borderWidth: Dp = 0.85.dp,
     borderBrush: Brush? = MatteGlassTokens.SpecularBorderBrush
-): Modifier {
+): Modifier = composed {
+    val style = remember(tintColor, blurRadius, MatteGlassTokens.isDark) {
+        liquidHazeStyle(tintColor = tintColor, blurRadius = blurRadius)
+    }
     val clipped = this.clip(shape)
     val blurred = if (hazeState != null) {
-        clipped.hazeEffect(
-            state = hazeState,
-            style = liquidHazeStyle(tintColor = tintColor, blurRadius = blurRadius)
-        )
+        clipped
+            .hazeEffect(state = hazeState, style = style)
+            .background(MatteGlassTokens.InnerGlowBrush)
     } else {
-        clipped.background(fallbackColor)
+        clipped
+            .background(fallbackColor)
+            .background(MatteGlassTokens.InnerGlowBrush)
     }
-    return if (borderBrush != null && borderWidth > 0.dp) {
+    if (borderBrush != null && borderWidth > 0.dp) {
         blurred.border(borderWidth, borderBrush, shape)
     } else {
         blurred
