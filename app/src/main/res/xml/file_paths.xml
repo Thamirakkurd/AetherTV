@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <external-path
+        name="external_downloads"
+        path="Download/AetherTV/" />
+    <external-files-path
+        name="app_downloads"
+        path="Downloads/" />
+    <cache-path
+        name="cache_subtitles"
+        path="subtitles/" />
+</paths>

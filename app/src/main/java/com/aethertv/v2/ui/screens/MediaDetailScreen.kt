@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,12 +24,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.aethertv.v2.data.ContentType
 import com.aethertv.v2.data.EpisodeItem
 import com.aethertv.v2.data.MediaDetailInfo
@@ -36,6 +39,8 @@ import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.components.GlassCircleActionButton
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 import com.aethertv.v2.ui.theme.livelyPress
+
+private val DetailCtaShape = RoundedCornerShape(12.dp)
 
 @Composable
 fun MediaDetailScreen(
@@ -52,6 +57,7 @@ fun MediaDetailScreen(
     onDownloadEpisode: (EpisodeItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val seasons = remember(episodes) { episodes.map { it.season }.distinct() }
     var selectedSeason by remember(seasons) { mutableStateOf(seasons.firstOrNull() ?: "") }
     val visibleEpisodes = remember(episodes, selectedSeason) {
@@ -59,7 +65,17 @@ fun MediaDetailScreen(
     }
 
     val heroImage = item.posterUrl?.takeIf { it.isNotBlank() } ?: detailInfo.backdropUrl
-    val showMovieDownload = item.contentType != ContentType.SERIES && item.contentType != ContentType.LIVE
+    val heroRequest = remember(heroImage) {
+        heroImage?.takeIf { it.isNotBlank() }?.let { url ->
+            ImageRequest.Builder(context)
+                .data(url)
+                .size(900, 1200)
+                .build()
+        }
+    }
+    val isHttpStream = item.streamUrl.startsWith("http://", ignoreCase = true) ||
+        item.streamUrl.startsWith("https://", ignoreCase = true)
+    val showMovieDownload = item.contentType != ContentType.SERIES && item.contentType != ContentType.LIVE && isHttpStream
     val topScrimColor = if (MatteGlassTokens.isDark) Color.Black.copy(alpha = 0.52f) else Color.White.copy(alpha = 0.45f)
 
     LazyColumn(
@@ -85,9 +101,9 @@ fun MediaDetailScreen(
                         )
                 )
 
-                if (!heroImage.isNullOrBlank()) {
+                if (heroRequest != null) {
                     AsyncImage(
-                        model = heroImage,
+                        model = heroRequest,
                         contentDescription = item.name,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.matchParentSize()
@@ -218,14 +234,18 @@ fun MediaDetailScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp)
-                            .livelyPress(pressedScale = 0.96f, depthShiftPx = 3f) {
+                            .livelyPress(
+                                pressedScale = 0.96f,
+                                depthShiftPx = 3f,
+                                shape = DetailCtaShape,
+                                rippleColor = MatteGlassTokens.CanvasWhite
+                            ) {
                                 if (item.contentType == ContentType.SERIES && episodes.isNotEmpty()) {
                                     onEpisodeClick(episodes.first())
                                 } else {
                                     onWatchNow()
                                 }
                             }
-                            .clip(RoundedCornerShape(12.dp))
                             .background(MatteGlassTokens.CharcoalPrimary),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
@@ -239,10 +259,14 @@ fun MediaDetailScreen(
                         Row(
                             modifier = Modifier
                                 .height(50.dp)
-                                .livelyPress(pressedScale = 0.95f, depthShiftPx = 3f, onClick = onDownloadItem)
-                                .clip(RoundedCornerShape(12.dp))
+                                .livelyPress(
+                                    pressedScale = 0.95f,
+                                    depthShiftPx = 3f,
+                                    shape = DetailCtaShape,
+                                    onClick = onDownloadItem
+                                )
                                 .background(MatteGlassTokens.CardGlassBg)
-                                .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
+                                .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, DetailCtaShape)
                                 .padding(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
@@ -296,8 +320,11 @@ fun MediaDetailScreen(
                             val selected = season == selectedSeason
                             Box(
                                 modifier = Modifier
-                                    .livelyPress(pressedScale = 0.94f) { selectedSeason = season }
-                                    .clip(CircleShape)
+                                    .livelyPress(
+                                        pressedScale = 0.94f,
+                                        shape = CircleShape,
+                                        rippleColor = if (selected) MatteGlassTokens.CanvasWhite else Color.Unspecified
+                                    ) { selectedSeason = season }
                                     .background(if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.FieldGlassBg)
                                     .border(
                                         0.8.dp,
@@ -319,15 +346,18 @@ fun MediaDetailScreen(
                 Spacer(Modifier.height(10.dp))
             }
 
-            items(visibleEpisodes, key = { it.id }) { ep ->
+            itemsIndexed(visibleEpisodes, key = { idx, ep -> "${idx}_${ep.id}" }) { _, ep ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 4.dp)
-                        .livelyPress(pressedScale = 0.975f, depthShiftPx = 2f) { onEpisodeClick(ep) }
-                        .clip(RoundedCornerShape(12.dp))
+                        .livelyPress(
+                            pressedScale = 0.975f,
+                            depthShiftPx = 2f,
+                            shape = DetailCtaShape
+                        ) { onEpisodeClick(ep) }
                         .background(MatteGlassTokens.CardGlassBg)
-                        .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
+                        .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, DetailCtaShape)
                         .padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween

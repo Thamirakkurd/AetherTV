@@ -3,20 +3,21 @@ package com.aethertv.v2.ui.theme
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.ripple
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,7 +78,6 @@ data class LiquidGlassPalette(
     val specularBorderBrush: Brush = Brush.verticalGradient(
         colors = listOf(specularTop, neutralBorder, specularBottom)
     )
-
 }
 
 val LightLiquidPalette = LiquidGlassPalette(
@@ -129,9 +129,17 @@ val DarkLiquidPalette = LiquidGlassPalette(
 )
 
 val LocalHazeState = staticCompositionLocalOf<HazeState?> { null }
+val LocalLiquidGlassPalette = staticCompositionLocalOf { LightLiquidPalette }
 
 object MatteGlassTokens {
     internal var palette by mutableStateOf(LightLiquidPalette)
+
+    fun syncPalette(darkTheme: Boolean) {
+        val target = if (darkTheme) DarkLiquidPalette else LightLiquidPalette
+        if (palette != target) {
+            palette = target
+        }
+    }
 
     val isDark: Boolean get() = palette.isDark
     val CanvasWhite: Color get() = palette.canvasBg
@@ -189,18 +197,25 @@ fun Modifier.liquidGlassSurface(
     }
 }
 
+/**
+ * Tactile spring-press animation with clipped, high-contrast ripple feedback.
+ * Pass [shape] so the ripple clips cleanly inside rounded corners/pills, and pass
+ * [rippleColor] (e.g. CanvasWhite) on dark/primary-filled buttons so the ripple stays visible.
+ */
 fun Modifier.livelyPress(
     enabled: Boolean = true,
     pressedScale: Float = 0.968f,
     depthShiftPx: Float = 3f,
     bounded: Boolean = true,
+    shape: Shape? = null,
+    rippleColor: Color = Color.Unspecified,
     onClick: () -> Unit
 ): Modifier = composed {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val rippleColor = MatteGlassTokens.CharcoalPrimary
-    val rippleIndication = remember(bounded, rippleColor) {
-        ripple(bounded = bounded, color = rippleColor)
+    val effectiveRippleColor = if (rippleColor != Color.Unspecified) rippleColor else MatteGlassTokens.CharcoalPrimary
+    val rippleIndication = remember(bounded, effectiveRippleColor) {
+        ripple(bounded = bounded, color = effectiveRippleColor)
     }
     val scale by animateFloatAsState(
         targetValue = if (pressed && enabled) pressedScale else 1f,
@@ -224,6 +239,7 @@ fun Modifier.livelyPress(
             translationY = translateY
             alpha = pressAlpha
         }
+        .let { base -> if (shape != null) base.clip(shape) else base }
         .clickable(
             enabled = enabled,
             interactionSource = interactionSource,
@@ -239,7 +255,11 @@ fun MatteGlassTheme(
     content: @Composable () -> Unit
 ) {
     val targetPalette = if (darkTheme) DarkLiquidPalette else LightLiquidPalette
-    MatteGlassTokens.palette = targetPalette
+    SideEffect {
+        if (MatteGlassTokens.palette != targetPalette) {
+            MatteGlassTokens.palette = targetPalette
+        }
+    }
 
     val colorScheme = remember(darkTheme) {
         if (darkTheme) {
@@ -293,6 +313,7 @@ fun MatteGlassTheme(
 
     CompositionLocalProvider(
         LocalHazeState provides hazeState,
+        LocalLiquidGlassPalette provides targetPalette,
         LocalContentColor provides targetPalette.primaryText
     ) {
         MaterialTheme(

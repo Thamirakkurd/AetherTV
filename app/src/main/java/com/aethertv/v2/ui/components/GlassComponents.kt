@@ -12,21 +12,18 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
-import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -56,6 +53,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -65,8 +63,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -101,14 +102,14 @@ private val CardScrimBrush = Brush.verticalGradient(
 )
 
 /**
- * Clean, bright full-width frosted bottom bar matching the minimal Apple/iOS style:
- * pure icons + subtle labels, hairline top border, zero circles or heavy beveled pills.
+ * Clean, bright full-width frosted bottom bar with GPU-driven sliding indicator
+ * that reads [pagePositionProvider] strictly inside graphicsLayer (zero recomposition per swipe frame).
  */
 @Composable
 fun FloatingGlassNavBar(
     items: List<NavTabItem>,
     selectedIndex: Int,
-    pagePosition: Float = selectedIndex.toFloat(),
+    pagePositionProvider: () -> Float = { selectedIndex.toFloat() },
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -139,15 +140,15 @@ fun FloatingGlassNavBar(
             val count = items.size.coerceAtLeast(1)
             val tabWidth = maxWidth / count
             val tabWidthPx = with(density) { tabWidth.toPx() }
-            val clampedPos = pagePosition.coerceIn(0f, (count - 1).toFloat())
-            val fractional = abs(clampedPos - clampedPos.roundToInt())
 
-            // Crisp minimal top sliding indicator driven on GPU
+            // Crisp minimal top sliding indicator driven purely on GPU layer
             Box(
                 modifier = Modifier
                     .width(tabWidth)
                     .align(Alignment.TopStart)
                     .graphicsLayer {
+                        val clampedPos = pagePositionProvider().coerceIn(0f, (count - 1).toFloat())
+                        val fractional = abs(clampedPos - clampedPos.roundToInt())
                         translationX = clampedPos * tabWidthPx
                         scaleX = 1f + fractional * 0.25f
                     },
@@ -229,7 +230,7 @@ fun GlassCircleActionButton(
     Box(
         modifier = modifier
             .size(44.dp)
-            .livelyPress(pressedScale = 0.88f, depthShiftPx = 1.5f, onClick = onClick),
+            .livelyPress(pressedScale = 0.88f, depthShiftPx = 1.5f, shape = CircleShape, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -279,11 +280,10 @@ fun SimpleScreenHeader(
                 color = MatteGlassTokens.CharcoalPrimary
             )
             if (onAddClick != null) {
-                // Pure icon — no circle around +
                 Box(
                     modifier = Modifier
                         .size(42.dp)
-                        .livelyPress(pressedScale = 0.86f, depthShiftPx = 1.5f, onClick = onAddClick),
+                        .livelyPress(pressedScale = 0.86f, depthShiftPx = 1.5f, shape = CircleShape, onClick = onAddClick),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -351,7 +351,6 @@ fun UnifiedMediaTopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Flat, bright search input (no dark gradient bevel)
             Row(
                 modifier = Modifier
                     .weight(1f)
@@ -399,7 +398,6 @@ fun UnifiedMediaTopBar(
                 }
             }
 
-            // Category selector: smooth spring-animated LazyColumn popup anchored to button
             if (categories.isNotEmpty()) {
                 val expandedState = remember { MutableTransitionState(false) }
                 expandedState.targetState = menuExpanded
@@ -414,7 +412,11 @@ fun UnifiedMediaTopBar(
                         modifier = Modifier
                             .height(40.dp)
                             .widthIn(max = 128.dp)
-                            .livelyPress(pressedScale = 0.94f, depthShiftPx = 1.5f) {
+                            .livelyPress(
+                                pressedScale = 0.94f,
+                                depthShiftPx = 1.5f,
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
                                 menuExpanded = !menuExpanded
                             }
                             .padding(horizontal = 4.dp),
@@ -452,11 +454,10 @@ fun UnifiedMediaTopBar(
                 }
             }
 
-            // Favorites toggle: pure icon, no circle
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .livelyPress(pressedScale = 0.86f, depthShiftPx = 1.5f) {
+                    .livelyPress(pressedScale = 0.86f, depthShiftPx = 1.5f, shape = CircleShape) {
                         if (isFavorites) {
                             val fallback = lastNonFavCategory.ifBlank {
                                 categories.firstOrNull { it != "All" && it != "Favorites" }
@@ -626,7 +627,6 @@ fun PosterMediaCard(
                 )
             }
 
-            // Subtle top scrim so borderless white icons stay sharp over bright posters
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -651,7 +651,6 @@ fun PosterMediaCard(
                 )
             }
 
-            // Clean icons only — no circles around Star or More
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -711,7 +710,6 @@ fun PosterMediaCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    // Pure Play icon — no circle
                     CardGlassCircleIcon(
                         icon = Icons.Default.PlayArrow,
                         contentDescription = "Play",
@@ -723,9 +721,6 @@ fun PosterMediaCard(
     }
 }
 
-/**
- * Borderless pure white media card icon (circle background & border removed).
- */
 @Composable
 private fun CardGlassCircleIcon(
     icon: ImageVector,
@@ -735,7 +730,13 @@ private fun CardGlassCircleIcon(
     Box(
         modifier = Modifier
             .size(32.dp)
-            .livelyPress(pressedScale = 0.84f, depthShiftPx = 1.5f, onClick = onClick),
+            .livelyPress(
+                pressedScale = 0.84f,
+                depthShiftPx = 1.5f,
+                shape = CircleShape,
+                rippleColor = Color.White,
+                onClick = onClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -760,7 +761,17 @@ fun MediaActionBottomSheet(
     onDownloadExternal: (() -> Unit)?,
     onToggleFavorite: () -> Unit
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val thumbReq = remember(item.posterUrl) {
+        item.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
+            ImageRequest.Builder(context)
+                .data(url)
+                .size(144, 192)
+                .build()
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -786,9 +797,9 @@ fun MediaActionBottomSheet(
                         .clip(RoundedCornerShape(6.dp))
                         .background(Color(0xFF1E222A))
                 ) {
-                    if (!item.posterUrl.isNullOrBlank()) {
+                    if (thumbReq != null) {
                         AsyncImage(
-                            model = item.posterUrl,
+                            model = thumbReq,
                             contentDescription = item.name,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
@@ -890,9 +901,6 @@ fun MediaActionBottomSheet(
     }
 }
 
-/**
- * Clean flat row — just crisp icon + text, no beveled box or border.
- */
 @Composable
 private fun ActionSheetRow(
     icon: ImageVector,
@@ -902,7 +910,12 @@ private fun ActionSheetRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f, onClick = onClick)
+            .livelyPress(
+                pressedScale = 0.98f,
+                depthShiftPx = 1.5f,
+                shape = RoundedCornerShape(10.dp),
+                onClick = onClick
+            )
             .padding(horizontal = 4.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -970,10 +983,10 @@ private fun CategoryDropdownPopup(
                     state = catListState,
                     contentPadding = PaddingValues(vertical = 6.dp)
                 ) {
-                    items(
+                    itemsIndexed(
                         items = categories,
-                        key = { it }
-                    ) { cat ->
+                        key = { idx, cat -> "${idx}_$cat" }
+                    ) { _, cat ->
                         val active = cat == selectedCategory
                         Row(
                             modifier = Modifier

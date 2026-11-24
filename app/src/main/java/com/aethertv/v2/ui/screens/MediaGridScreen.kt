@@ -31,9 +31,7 @@ import com.aethertv.v2.ui.components.PosterMediaCard
 import com.aethertv.v2.ui.components.UnifiedMediaTopBar
 import com.aethertv.v2.ui.components.rememberGridSpringPhysicsState
 import com.aethertv.v2.ui.theme.LiquidGlassTokens
-import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
-import dev.chrisbanes.haze.hazeSource
 
 @Composable
 fun MediaGridScreen(
@@ -55,7 +53,6 @@ fun MediaGridScreen(
     onPlayClick: (MediaItem) -> Unit,
     onMoreClick: (MediaItem) -> Unit = onItemClick
 ) {
-    val hazeState = LocalHazeState.current
     val physicsState = rememberGridSpringPhysicsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -71,7 +68,6 @@ fun MediaGridScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (hazeState != null) Modifier.hazeSource(hazeState) else Modifier)
                 .background(MatteGlassTokens.AmbientCanvasBrush)
         ) {
             if (items.isEmpty() && !isLoading) {

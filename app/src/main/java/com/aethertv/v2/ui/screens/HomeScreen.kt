@@ -62,11 +62,11 @@ import com.aethertv.v2.ui.components.SimpleScreenHeader
 import com.aethertv.v2.ui.components.rememberGridSpringPhysicsState
 import com.aethertv.v2.ui.components.tripleHairlinePortraitFrame
 import com.aethertv.v2.ui.theme.LiquidGlassTokens
-import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 import com.aethertv.v2.ui.theme.livelyPress
-import dev.chrisbanes.haze.hazeSource
 
+private val RecentThumbShape = RoundedCornerShape(LiquidGlassTokens.CardCornerRadius)
+private val AddServerBtnShape = RoundedCornerShape(12.dp)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -78,6 +78,7 @@ fun HomeScreen(
     listState: LazyListState = rememberLazyListState(),
     extraBottomPadding: Dp = 0.dp,
     onItemClick: (MediaItem) -> Unit,
+    onRecentClick: (MediaItem) -> Unit = onItemClick,
     onFavoriteClick: (MediaItem) -> Unit,
     onPlayClick: (MediaItem) -> Unit,
     onMoreClick: (MediaItem) -> Unit = onItemClick,
@@ -89,7 +90,6 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
-    val hazeState = LocalHazeState.current
     val physicsState = rememberGridSpringPhysicsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -109,7 +109,6 @@ fun HomeScreen(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(if (hazeState != null) Modifier.hazeSource(hazeState) else Modifier)
                     .background(MatteGlassTokens.AmbientCanvasBrush)
                     .nestedScroll(physicsState.nestedScrollConnection),
                 contentPadding = PaddingValues(
@@ -145,8 +144,12 @@ fun HomeScreen(
                             Spacer(Modifier.height(2.dp))
                             Row(
                                 modifier = Modifier
-                                    .livelyPress(pressedScale = 0.94f, onClick = onAddPlaylistClick)
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .livelyPress(
+                                        pressedScale = 0.94f,
+                                        shape = AddServerBtnShape,
+                                        rippleColor = MatteGlassTokens.CanvasWhite,
+                                        onClick = onAddPlaylistClick
+                                    )
                                     .background(MatteGlassTokens.CharcoalPrimary)
                                     .padding(horizontal = 18.dp, vertical = 11.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -171,7 +174,6 @@ fun HomeScreen(
 
                 item(key = "favorites_shelf") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // Text-only clickable header — no extra icons or badges
                         Text(
                             text = "Movies & Series Favorites",
                             fontSize = 22.sp,
@@ -180,7 +182,12 @@ fun HomeScreen(
                             color = MatteGlassTokens.CharcoalPrimary,
                             modifier = Modifier
                                 .padding(horizontal = 12.dp)
-                                .livelyPress(pressedScale = 0.97f, depthShiftPx = 1.5f, onClick = onOpenFavoritesPage)
+                                .livelyPress(
+                                    pressedScale = 0.97f,
+                                    depthShiftPx = 1.5f,
+                                    shape = RoundedCornerShape(8.dp),
+                                    onClick = onOpenFavoritesPage
+                                )
                         )
 
                         if (favoriteMedia.isEmpty()) {
@@ -246,11 +253,15 @@ fun HomeScreen(
 
                 item(key = "recents_shelf") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // Clicking Recently Watched opens the dedicated Recently Watched page
                         Row(
                             modifier = Modifier
                                 .padding(horizontal = 12.dp)
-                                .livelyPress(pressedScale = 0.97f, depthShiftPx = 1.5f, onClick = onOpenRecentsPage),
+                                .livelyPress(
+                                    pressedScale = 0.97f,
+                                    depthShiftPx = 1.5f,
+                                    shape = RoundedCornerShape(8.dp),
+                                    onClick = onOpenRecentsPage
+                                ),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
@@ -295,7 +306,6 @@ fun HomeScreen(
                                         label = "recentPop"
                                     )
                                     val stagger = 1f + ((index % 3) * 0.12f)
-                                    val thumbShape = RoundedCornerShape(LiquidGlassTokens.CardCornerRadius)
                                     val thumbReq = remember(item.posterUrl) {
                                         item.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
                                             ImageRequest.Builder(context)
@@ -323,10 +333,7 @@ fun HomeScreen(
                                             .combinedClickable(
                                                 interactionSource = interactionSource,
                                                 indication = null,
-                                                onClick = {
-                                                    if (item.contentType == ContentType.LIVE) onPlayClick(item)
-                                                    else onItemClick(item)
-                                                },
+                                                onClick = { onRecentClick(item) },
                                                 onLongClick = {
                                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                                     recentMenuTarget = item
@@ -339,7 +346,7 @@ fun HomeScreen(
                                                 .height(172.dp)
                                                 .tripleHairlinePortraitFrame(isDark = isDark, isActive = pressed)
                                                 .padding(LiquidGlassTokens.CardFrameInset)
-                                                .clip(thumbShape)
+                                                .clip(RecentThumbShape)
                                                 .background(LiquidGlassTokens.GlassFillDark)
                                         ) {
                                             if (thumbReq != null) {
@@ -383,8 +390,7 @@ fun HomeScreen(
                 onDismiss = { recentMenuTarget = null },
                 onResume = {
                     recentMenuTarget = null
-                    if (target.contentType == ContentType.LIVE) onPlayClick(target)
-                    else onItemClick(target)
+                    onRecentClick(target)
                 },
                 onRemove = {
                     recentMenuTarget = null
@@ -408,7 +414,16 @@ fun RecentItemActionSheet(
     onRemove: () -> Unit,
     onClearAll: () -> Unit
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val thumbReq = remember(item.posterUrl) {
+        item.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
+            ImageRequest.Builder(context)
+                .data(url)
+                .size(144, 192)
+                .build()
+        }
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -434,9 +449,9 @@ fun RecentItemActionSheet(
                         .clip(RoundedCornerShape(4.dp))
                         .background(Color(0xFF1E222A))
                 ) {
-                    if (!item.posterUrl.isNullOrBlank()) {
+                    if (thumbReq != null) {
                         AsyncImage(
-                            model = item.posterUrl,
+                            model = thumbReq,
                             contentDescription = item.name,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
@@ -471,7 +486,12 @@ fun RecentItemActionSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f, onClick = onResume)
+                    .livelyPress(
+                        pressedScale = 0.98f,
+                        depthShiftPx = 1.5f,
+                        shape = RoundedCornerShape(10.dp),
+                        onClick = onResume
+                    )
                     .padding(horizontal = 4.dp, vertical = 15.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -495,7 +515,12 @@ fun RecentItemActionSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f, onClick = onRemove)
+                    .livelyPress(
+                        pressedScale = 0.98f,
+                        depthShiftPx = 1.5f,
+                        shape = RoundedCornerShape(10.dp),
+                        onClick = onRemove
+                    )
                     .padding(horizontal = 4.dp, vertical = 15.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -519,7 +544,12 @@ fun RecentItemActionSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .livelyPress(pressedScale = 0.98f, depthShiftPx = 1.5f, onClick = onClearAll)
+                    .livelyPress(
+                        pressedScale = 0.98f,
+                        depthShiftPx = 1.5f,
+                        shape = RoundedCornerShape(10.dp),
+                        onClick = onClearAll
+                    )
                     .padding(horizontal = 4.dp, vertical = 15.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

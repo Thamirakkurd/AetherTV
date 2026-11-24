@@ -2,6 +2,7 @@ package com.aethertv.v2.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -25,11 +26,17 @@ import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,15 +53,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aethertv.v2.BuildConfig
 import com.aethertv.v2.data.DownloadMode
+import com.aethertv.v2.data.DownloadedMediaFile
 import com.aethertv.v2.data.SavedServer
 import com.aethertv.v2.ui.components.SimpleScreenHeader
 import com.aethertv.v2.ui.theme.AppThemeMode
-import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 import com.aethertv.v2.ui.theme.livelyPress
-import dev.chrisbanes.haze.hazeSource
-import java.io.File
 import java.util.Locale
 
 @Composable
@@ -63,7 +69,7 @@ fun SettingsScreen(
     activeServerId: String,
     themeMode: AppThemeMode,
     downloadMode: DownloadMode,
-    downloadedFiles: List<File>,
+    downloadedFiles: List<DownloadedMediaFile>,
     favoritesCount: Int,
     recentCount: Int,
     extraBottomPadding: Dp = 0.dp,
@@ -73,21 +79,22 @@ fun SettingsScreen(
     onAddServerClick: () -> Unit,
     onRefreshPlaylist: () -> Unit,
     onChangeDownloadMode: (DownloadMode) -> Unit,
-    onPlayDownloadedFile: (File) -> Unit,
-    onDeleteDownloadedFile: (File) -> Unit,
+    onPlayDownloadedFile: (DownloadedMediaFile) -> Unit,
+    onDeleteDownloadedFile: (DownloadedMediaFile) -> Unit,
     onClearAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val hazeState = LocalHazeState.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    var serverToDelete by remember { mutableStateOf<SavedServer?>(null) }
+    var showClearAllConfirm by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (hazeState != null) Modifier.hazeSource(hazeState) else Modifier)
                 .background(MatteGlassTokens.AmbientCanvasBrush),
             contentPadding = PaddingValues(
                 start = 12.dp,
@@ -217,7 +224,7 @@ fun SettingsScreen(
                                     )
                                 }
                                 IconButton(
-                                    onClick = { onDeleteServer(srv) },
+                                    onClick = { serverToDelete = srv },
                                     modifier = Modifier.size(40.dp)
                                 ) {
                                     Icon(
@@ -296,7 +303,7 @@ fun SettingsScreen(
                 }
             }
 
-            // 4. Offline Downloads
+            // 4. Offline Downloads (uses precomputed sizeBytes off the Main Thread)
             item(key = "downloads_section") {
                 SettingsGlassGroup(title = "OFFLINE DOWNLOADS (${downloadedFiles.size})") {
                     if (downloadedFiles.isEmpty()) {
@@ -305,8 +312,8 @@ fun SettingsScreen(
                             message = "No offline files saved in Downloads/AetherTV."
                         )
                     } else {
-                        downloadedFiles.forEachIndexed { index, file ->
-                            val sizeMb = file.length() / (1024.0 * 1024.0)
+                        downloadedFiles.forEachIndexed { index, entry ->
+                            val sizeMb = entry.sizeBytes / (1024.0 * 1024.0)
                             val sizeLabel = String.format(Locale.US, "%.1f MB", sizeMb)
 
                             Row(
@@ -324,7 +331,7 @@ fun SettingsScreen(
                                 Spacer(Modifier.width(16.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = file.nameWithoutExtension,
+                                        text = entry.displayName,
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MatteGlassTokens.CharcoalPrimary,
@@ -338,7 +345,7 @@ fun SettingsScreen(
                                     )
                                 }
                                 IconButton(
-                                    onClick = { onPlayDownloadedFile(file) },
+                                    onClick = { onPlayDownloadedFile(entry) },
                                     modifier = Modifier.size(42.dp)
                                 ) {
                                     Icon(
@@ -349,7 +356,7 @@ fun SettingsScreen(
                                     )
                                 }
                                 IconButton(
-                                    onClick = { onDeleteDownloadedFile(file) },
+                                    onClick = { onDeleteDownloadedFile(entry) },
                                     modifier = Modifier.size(42.dp)
                                 ) {
                                     Icon(
@@ -430,7 +437,9 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .livelyPress(pressedScale = 0.985f, depthShiftPx = 1.5f, onClick = onClearAll)
+                            .livelyPress(pressedScale = 0.985f, depthShiftPx = 1.5f) {
+                                showClearAllConfirm = true
+                            }
                             .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -465,8 +474,12 @@ fun SettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .livelyPress(pressedScale = 0.985f, depthShiftPx = 1.5f) {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Thamirakkurd"))
-                                context.startActivity(intent)
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Thamirakkurd"))
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    Toast.makeText(context, "No browser found to open link", Toast.LENGTH_SHORT).show()
+                                }
                             }
                             .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -482,7 +495,7 @@ fun SettingsScreen(
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                text = "AetherTV v3.4.8 • github.com/Thamirakkurd",
+                                text = "AetherTV v${BuildConfig.VERSION_NAME} • github.com/Thamirakkurd",
                                 fontSize = 12.5.sp,
                                 color = MatteGlassTokens.CharcoalMuted,
                                 maxLines = 1,
@@ -504,6 +517,76 @@ fun SettingsScreen(
             title = "Settings",
             onAddClick = onAddServerClick,
             modifier = Modifier.align(Alignment.TopCenter)
+        )
+    }
+
+    serverToDelete?.let { srv ->
+        AlertDialog(
+            onDismissRequest = { serverToDelete = null },
+            containerColor = MatteGlassTokens.SheetBg,
+            title = {
+                Text(
+                    text = "Remove Server?",
+                    fontWeight = FontWeight.Bold,
+                    color = MatteGlassTokens.CharcoalPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "Remove \"${srv.name.ifBlank { srv.host.ifBlank { "Playlist" } }}\" and its cached playlist data?",
+                    color = MatteGlassTokens.CharcoalMuted
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        serverToDelete = null
+                        onDeleteServer(srv)
+                    }
+                ) {
+                    Text("Remove", color = MatteGlassTokens.NotificationDot, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { serverToDelete = null }) {
+                    Text("Cancel", color = MatteGlassTokens.CharcoalPrimary)
+                }
+            }
+        )
+    }
+
+    if (showClearAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearAllConfirm = false },
+            containerColor = MatteGlassTokens.SheetBg,
+            title = {
+                Text(
+                    text = "Clear All Saved Data?",
+                    fontWeight = FontWeight.Bold,
+                    color = MatteGlassTokens.CharcoalPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "This will permanently remove all saved servers, cached playlists, favorites, watch history, and resume progress.",
+                    color = MatteGlassTokens.CharcoalMuted
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearAllConfirm = false
+                        onClearAll()
+                    }
+                ) {
+                    Text("Clear Everything", color = MatteGlassTokens.NotificationDot, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearAllConfirm = false }) {
+                    Text("Cancel", color = MatteGlassTokens.CharcoalPrimary)
+                }
+            }
         )
     }
 }

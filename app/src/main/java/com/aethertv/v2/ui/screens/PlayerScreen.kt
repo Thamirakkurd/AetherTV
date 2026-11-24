@@ -4,8 +4,11 @@ import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.database.ContentObserver
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -34,6 +37,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -100,6 +104,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem as ExoMediaItem
 import androidx.media3.common.MimeTypes
@@ -111,7 +119,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -125,6 +133,9 @@ import com.aethertv.v2.data.MediaDetailInfo
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.data.OnlineSubtitleResult
 import com.aethertv.v2.data.OnlineSubtitleService
+import com.aethertv.v2.data.SubtitleSearchOutcome
+import com.aethertv.v2.data.SubtitleShiftHelper
+import com.aethertv.v2.data.XtreamClient
 import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 import com.aethertv.v2.ui.theme.liquidGlassSurface
@@ -132,14 +143,21 @@ import com.aethertv.v2.ui.theme.livelyPress
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.util.Locale
 import kotlin.math.roundToInt
 
 private enum class GestureHudType { BRIGHTNESS, VOLUME }
+
+private data class SelectableTrack(
+    val group: Tracks.Group,
+    val trackIndex: Int,
+    val label: String,
+    val isSelected: Boolean
+)
 
 private val YouTubeRed = Color(0xFFFF0033)
 
@@ -219,54 +237,25 @@ private fun applyWindowBrightness(activity: Activity?, value: Float) {
 
 @androidx.annotation.OptIn(UnstableApi::class)
 private fun createAetherExoPlayer(context: Context): ExoPlayer {
-    val httpFactory = DefaultHttpDataSource.Factory()
-        .setUserAgent("AetherTV/3.3 (Android)")
-        .setAllowCrossProtocolRedirects(true)
-        .setConnectTimeoutMs(15000)
-        .setReadTimeoutMs(20000)
+    val httpFactory = OkHttpDataSource.Factory(XtreamClient.httpClient)
+        .setUserAgent(XtreamClient.USER_AGENT)
     val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
+    val audioAttributes = AudioAttributes.Builder()
+        .setUsage(C.USAGE_MEDIA)
+        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+        .build()
     return ExoPlayer.Builder(context)
         .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+        .setAudioAttributes(audioAttributes, true)
+        .setHandleAudioBecomingNoisy(true)
         .build()
 }
 
-private suspend fun shiftSubtitleFile(
-    context: Context,
-    sourceUri: Uri,
-    delayMs: Long
-): Uri? = withContext(Dispatchers.IO) {
-    try {
-        val rawText = context.contentResolver.openInputStream(sourceUri)?.bufferedReader()?.use { it.readText() }
-            ?: return@withContext null
-        val isVtt = sourceUri.toString().endsWith(".vtt", ignoreCase = true) || rawText.trimStart().startsWith("WEBVTT")
-        val timeRegex = Regex("""(\d{1,2}:)?(\d{2}):(\d{2})([,.])(\d{3})""")
-        val shifted = timeRegex.replace(rawText) { m ->
-            val hasHours = m.groupValues[1].isNotEmpty()
-            val h = m.groupValues[1].removeSuffix(":").toLongOrNull() ?: 0L
-            val min = m.groupValues[2].toLong()
-            val sec = m.groupValues[3].toLong()
-            val sep = m.groupValues[4]
-            val ms = m.groupValues[5].toLong()
-            val total = ((h * 3600L + min * 60L + sec) * 1000L + ms + delayMs).coerceAtLeast(0L)
-            val nh = total / 3_600_000L
-            val nmin = (total % 3_600_000L) / 60_000L
-            val nsec = (total % 60_000L) / 1000L
-            val nms = total % 1000L
-            if (hasHours || nh > 0L) {
-                String.format(Locale.US, "%02d:%02d:%02d%s%03d", nh, nmin, nsec, sep, nms)
-            } else {
-                String.format(Locale.US, "%02d:%02d%s%03d", nmin, nsec, sep, nms)
-            }
-        }
-        val dir = File(context.cacheDir, "subtitles").apply { if (!exists()) mkdirs() }
-        val ext = if (isVtt) "vtt" else "srt"
-        val outFile = File(dir, "shifted_${System.currentTimeMillis()}.$ext")
-        outFile.writeText(shifted)
-        Uri.fromFile(outFile)
-    } catch (_: Exception) {
-        null
-    }
-}
+private class PlayerViewApplyCache(
+    var resizeMode: Int = -1,
+    var subAlpha: Float = -1f,
+    var subTextSp: Float = -1f
+)
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
@@ -276,7 +265,8 @@ fun UnifiedMorphPlayerOverlay(
     isMiniPlayer: Boolean,
     isInPipMode: Boolean,
     barsVisible: Boolean,
-    favoriteIds: Set<String>,
+    isCurrentItemFavorite: Boolean,
+    initialPositionMs: Long = 0L,
     // Live TV context
     liveChannels: List<MediaItem>,
     liveCategories: List<String>,
@@ -296,10 +286,14 @@ fun UnifiedMorphPlayerOverlay(
     onToggleFavorite: (MediaItem) -> Unit,
     onMoreClick: (MediaItem) -> Unit,
     onEnterPip: () -> Unit,
-    onOpenExternal: (MediaItem) -> Unit
+    onOpenExternal: (MediaItem) -> Unit,
+    onSaveProgress: (String, Long, Long) -> Unit = { _, _, _ -> },
+    onPlayingStateChanged: (Boolean) -> Unit = {},
+    onVideoAspectRatioChanged: (Int, Int) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val lifecycleOwner = LocalLifecycleOwner.current
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -307,6 +301,11 @@ fun UnifiedMorphPlayerOverlay(
     val feedHazeState = remember { HazeState() }
 
     val isLive = item.contentType == ContentType.LIVE
+    val latestItem by rememberUpdatedState(item)
+    val latestIsLive by rememberUpdatedState(isLive)
+    val latestIsInPipMode by rememberUpdatedState(isInPipMode)
+    val latestOnSaveProgress by rememberUpdatedState(onSaveProgress)
+    val latestOnVideoAspectRatioChanged by rememberUpdatedState(onVideoAspectRatioChanged)
 
     var isPlaying by remember { mutableStateOf(true) }
     var isBuffering by remember { mutableStateOf(true) }
@@ -315,6 +314,7 @@ fun UnifiedMorphPlayerOverlay(
     val isLandscapeConfig = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     var controlsVisible by remember { mutableStateOf(true) }
+    var controlsInteractionStamp by remember { mutableLongStateOf(0L) }
     var isFullscreen by remember { mutableStateOf(isLandscapeConfig && !isMiniPlayer) }
     var manualOrientationLock by remember { mutableStateOf<Int?>(null) }
     var resizeModeIndex by remember { mutableIntStateOf(0) }
@@ -329,10 +329,8 @@ fun UnifiedMorphPlayerOverlay(
 
     fun exitFullscreen() {
         isFullscreen = false
-        val autoRotateOn = try {
-            Settings.System.getInt(context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
-        } catch (_: Exception) { false }
-        if (isLandscapeConfig && autoRotateOn) {
+        if (isLandscapeConfig) {
+            // Always force portrait out of landscape so the user is never trapped when auto-rotate is off
             manualOrientationLock = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         } else {
@@ -351,16 +349,43 @@ fun UnifiedMorphPlayerOverlay(
         }
     }
 
-    DisposableEffect(context, activity) {
+    // Cache ACCELEROMETER_ROTATION via ContentObserver + only enable OrientationEventListener when locked
+    var autoRotateEnabled by remember {
+        mutableStateOf(
+            try {
+                Settings.System.getInt(context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
+            } catch (_: Exception) { false }
+        )
+    }
+    DisposableEffect(context) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                autoRotateEnabled = try {
+                    Settings.System.getInt(context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
+                } catch (_: Exception) { false }
+            }
+        }
+        val uri = Settings.System.getUriFor(Settings.System.ACCELEROMETER_ROTATION)
+        try {
+            context.contentResolver.registerContentObserver(uri, false, observer)
+        } catch (_: Exception) {
+        }
+        onDispose {
+            try {
+                context.contentResolver.unregisterContentObserver(observer)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    DisposableEffect(context, activity, manualOrientationLock, autoRotateEnabled) {
+        val lock = manualOrientationLock
+        if (lock == null || !autoRotateEnabled) {
+            return@DisposableEffect onDispose { }
+        }
         val listener = object : OrientationEventListener(context) {
             override fun onOrientationChanged(angle: Int) {
                 if (angle == ORIENTATION_UNKNOWN) return
-                val lock = manualOrientationLock ?: return
-                val autoRotateOn = try {
-                    Settings.System.getInt(context.contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
-                } catch (_: Exception) { false }
-                if (!autoRotateOn) return
-
                 val physicallyPortrait = angle <= 35 || angle >= 325
                 val physicallyLandscape = (angle in 55..125) || (angle in 235..305)
                 if (lock == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT && physicallyPortrait) {
@@ -391,16 +416,32 @@ fun UnifiedMorphPlayerOverlay(
     var showCategorySheet by remember { mutableStateOf(false) }
     var showDescriptionSheet by remember { mutableStateOf(false) }
 
-    // Tracks & Subtitles
-    var embeddedTextGroups by remember { mutableStateOf<List<Tracks.Group>>(emptyList()) }
-    var embeddedAudioGroups by remember { mutableStateOf<List<Tracks.Group>>(emptyList()) }
+    // Dismiss any open bottom sheets automatically when entering PiP
+    LaunchedEffect(isInPipMode) {
+        if (isInPipMode) {
+            showSubtitleSheet = false
+            showPlayerSettingsSheet = false
+            showCategorySheet = false
+            showDescriptionSheet = false
+        }
+    }
+
+    // Tracks & Subtitles (per-track granularity across multi-track HLS/DASH groups)
+    var embeddedTextTracks by remember { mutableStateOf<List<SelectableTrack>>(emptyList()) }
+    var embeddedAudioTracks by remember { mutableStateOf<List<SelectableTrack>>(emptyList()) }
     var selectedSubtitleLabel by remember { mutableStateOf("Auto") }
     var selectedAudioLabel by remember { mutableStateOf("Default") }
     var subtitleFontScale by remember { mutableFloatStateOf(1.0f) }
     var subtitleDelayMs by remember { mutableLongStateOf(0L) }
     var externalSubtitleUri by remember { mutableStateOf<Uri?>(null) }
     var delayedEmbeddedText by remember { mutableStateOf("") }
-    var cueDelayJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val pendingCueJobs = remember { ArrayList<Job>() }
+
+    fun clearPendingCueJobs() {
+        pendingCueJobs.forEach { it.cancel() }
+        pendingCueJobs.clear()
+        delayedEmbeddedText = ""
+    }
 
     // Brightness / Volume & Double-Tap Seek HUDs
     var activeHud by remember { mutableStateOf<GestureHudType?>(null) }
@@ -435,6 +476,81 @@ fun UnifiedMorphPlayerOverlay(
     // Single persistent ExoPlayer instance
     val exoPlayer = remember { createAetherExoPlayer(context) }
 
+    fun saveCurrentVodProgress() {
+        if (!latestIsLive) {
+            val dur = exoPlayer.duration
+            val pos = exoPlayer.currentPosition
+            if (dur > 0L && pos >= 0L) {
+                latestOnSaveProgress(latestItem.id, pos, dur)
+            }
+        }
+    }
+
+    fun togglePlayPause() {
+        controlsInteractionStamp++
+        if (exoPlayer.isPlaying) {
+            saveCurrentVodProgress()
+            exoPlayer.pause()
+        } else {
+            if (exoPlayer.playbackState == Player.STATE_ENDED) {
+                exoPlayer.seekTo(0L)
+            }
+            exoPlayer.play()
+        }
+    }
+
+    fun seekBy(deltaMs: Long) {
+        controlsInteractionStamp++
+        clearPendingCueJobs()
+        val dur = exoPlayer.duration
+        val target = (exoPlayer.currentPosition + deltaMs).let { raw ->
+            if (dur > 0L) raw.coerceIn(0L, dur) else raw.coerceAtLeast(0L)
+        }
+        currentPosMs = target
+        exoPlayer.seekTo(target)
+    }
+
+    // Keep screen awake strictly while actively playing and not minimized
+    DisposableEffect(isPlaying, isMiniPlayer, activity) {
+        if (isPlaying && !isMiniPlayer) {
+            activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    LaunchedEffect(isPlaying) {
+        onPlayingStateChanged(isPlaying)
+    }
+
+    // Pause ExoPlayer cleanly on background / PiP dismissal (prevents invisible background audio leaks!)
+    DisposableEffect(lifecycleOwner, exoPlayer) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    saveCurrentVodProgress()
+                    if (!latestIsInPipMode && exoPlayer.isPlaying) {
+                        exoPlayer.pause()
+                    }
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    saveCurrentVodProgress()
+                    if (exoPlayer.isPlaying) {
+                        exoPlayer.pause()
+                    }
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     // Smoothly sync expandAnim with isMiniPlayer state changes (taps, back button, new item)
     var pendingFlingVelocity by remember { mutableFloatStateOf(0f) }
 
@@ -450,42 +566,53 @@ fun UnifiedMorphPlayerOverlay(
         )
     }
 
-    // Load new stream seamlessly on the same TextureView surface
-    LaunchedEffect(item.streamUrl) {
+    // Load new stream seamlessly on the same TextureView surface & reset all track overrides
+    LaunchedEffect(item.id, item.streamUrl) {
         errorText = null
         isBuffering = true
-        currentPosMs = 0L
+        currentPosMs = if (!isLive && initialPositionMs > 5_000L) initialPositionMs else 0L
         durationMs = 0L
         videoResolution = ""
         videoCodec = ""
         audioInfo = ""
         bitrateInfo = ""
-        cueDelayJob?.cancel()
+        clearPendingCueJobs()
         externalSubtitleUri = null
-        delayedEmbeddedText = ""
         subtitleDelayMs = 0L
         selectedSubtitleLabel = "Auto"
         selectedAudioLabel = "Default"
         playbackSpeed = 1.0f
         exoPlayer.setPlaybackSpeed(1.0f)
-        exoPlayer.setMediaItem(ExoMediaItem.fromUri(item.streamUrl))
+        // Clear any previous subtitle-off or audio/text overrides so they never leak to the next stream
+        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+            .buildUpon()
+            .clearOverrides()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .build()
+        val mediaItem = ExoMediaItem.fromUri(item.streamUrl)
+        if (!isLive && initialPositionMs > 5_000L) {
+            exoPlayer.setMediaItem(mediaItem, initialPositionMs)
+        } else {
+            exoPlayer.setMediaItem(mediaItem)
+        }
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
     }
 
     fun applyExternalSubtitle(subUri: Uri, label: String, delayMs: Long) {
+        val expectedUrl = latestItem.streamUrl
         scope.launch {
-            val effectiveUri = if (delayMs != 0L) {
-                shiftSubtitleFile(context, subUri, delayMs) ?: subUri
+            val (effectiveUri, isVtt) = if (delayMs != 0L) {
+                SubtitleShiftHelper.shiftSubtitleFile(context, subUri, delayMs)
+                    ?: (subUri to SubtitleShiftHelper.detectIsWebVtt(context, subUri))
             } else {
-                subUri
+                subUri to SubtitleShiftHelper.detectIsWebVtt(context, subUri)
             }
-            val resumePos = exoPlayer.currentPosition
-            val mimeType = if (effectiveUri.toString().endsWith(".vtt", ignoreCase = true)) {
-                MimeTypes.TEXT_VTT
-            } else {
-                MimeTypes.APPLICATION_SUBRIP
-            }
+            // Abort if the user switched streams while subtitle I/O was in flight
+            if (latestItem.streamUrl != expectedUrl) return@launch
+
+            val resumePos = exoPlayer.currentPosition.coerceAtLeast(0L)
+            val mimeType = if (isVtt) MimeTypes.TEXT_VTT else MimeTypes.APPLICATION_SUBRIP
             val subConfig = ExoMediaItem.SubtitleConfiguration.Builder(effectiveUri)
                 .setMimeType(mimeType)
                 .setLanguage("en")
@@ -494,15 +621,16 @@ fun UnifiedMorphPlayerOverlay(
                 .build()
 
             val newMediaItem = ExoMediaItem.Builder()
-                .setUri(item.streamUrl)
+                .setUri(expectedUrl)
                 .setSubtitleConfigurations(listOf(subConfig))
                 .build()
 
             externalSubtitleUri = subUri
             selectedSubtitleLabel = label
-            delayedEmbeddedText = ""
+            clearPendingCueJobs()
             exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
                 .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                 .build()
             exoPlayer.setMediaItem(newMediaItem, resumePos)
@@ -523,13 +651,14 @@ fun UnifiedMorphPlayerOverlay(
     val useEmbeddedDelayOverlay = !isLive && externalSubtitleUri == null && subtitleDelayMs > 0L
 
     DisposableEffect(exoPlayer) {
-        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isBuffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_READY) {
                     durationMs = exoPlayer.duration.coerceAtLeast(0L)
                     errorText = null
+                } else if (playbackState == Player.STATE_ENDED) {
+                    saveCurrentVodProgress()
                 }
             }
 
@@ -540,48 +669,68 @@ fun UnifiedMorphPlayerOverlay(
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 if (videoSize.width > 0 && videoSize.height > 0) {
                     videoResolution = "${videoSize.width}×${videoSize.height}"
+                    latestOnVideoAspectRatioChanged(videoSize.width, videoSize.height)
                 }
             }
 
             override fun onCues(cueGroup: CueGroup) {
-                cueDelayJob?.cancel()
-                if (!isLive && externalSubtitleUri == null && subtitleDelayMs > 0L) {
+                if (!latestIsLive && externalSubtitleUri == null && subtitleDelayMs > 0L) {
                     val cueText = cueGroup.cues.mapNotNull { it.text?.toString() }.joinToString("\n")
                     val waitMs = subtitleDelayMs
-                    cueDelayJob = scope.launch {
+                    val job = scope.launch {
                         delay(waitMs)
                         delayedEmbeddedText = cueText
                     }
+                    pendingCueJobs.removeAll { it.isCompleted || it.isCancelled }
+                    pendingCueJobs.add(job)
                 } else {
-                    delayedEmbeddedText = ""
+                    clearPendingCueJobs()
                 }
             }
 
             override fun onTracksChanged(tracks: Tracks) {
-                val textGroups = ArrayList<Tracks.Group>()
-                val audioGroups = ArrayList<Tracks.Group>()
+                val textTracks = ArrayList<SelectableTrack>()
+                val audioTracks = ArrayList<SelectableTrack>()
                 for (group in tracks.groups) {
-                    if (group.type == C.TRACK_TYPE_TEXT) textGroups.add(group)
-                    if (group.type == C.TRACK_TYPE_AUDIO) audioGroups.add(group)
-                    if (group.isSelected && group.length > 0) {
-                        val format = group.getTrackFormat(0)
-                        if (group.type == C.TRACK_TYPE_VIDEO) {
-                            val fps = if (format.frameRate > 0f) " ${format.frameRate.toInt()}fps" else ""
-                            val codecName = format.sampleMimeType?.substringAfter("/")?.uppercase() ?: ""
-                            videoCodec = "$codecName$fps".trim()
-                            if (format.bitrate > 0) {
-                                bitrateInfo = String.format(Locale.US, "%.1f Mbps", format.bitrate / 1_000_000f)
+                    for (trackIdx in 0 until group.length) {
+                        val format = group.getTrackFormat(trackIdx)
+                        val selected = group.isTrackSelected(trackIdx)
+                        when (group.type) {
+                            C.TRACK_TYPE_TEXT -> {
+                                val baseLabel = format.label ?: format.language ?: "Track ${textTracks.size + 1}"
+                                textTracks.add(SelectableTrack(group, trackIdx, baseLabel, selected))
                             }
-                        } else if (group.type == C.TRACK_TYPE_AUDIO) {
-                            val aCodec = format.sampleMimeType?.substringAfter("/")?.uppercase() ?: "AUDIO"
-                            val ch = if (format.channelCount > 0) "${format.channelCount}ch" else ""
-                            audioInfo = "$aCodec $ch".trim()
-                            selectedAudioLabel = format.label ?: format.language ?: audioInfo
+                            C.TRACK_TYPE_AUDIO -> {
+                                val aCodec = format.sampleMimeType?.substringAfter("/")?.uppercase() ?: "AUDIO"
+                                val ch = if (format.channelCount > 0) "${format.channelCount}ch" else ""
+                                val suffix = listOf(aCodec, ch).filter { it.isNotBlank() }.joinToString(" ")
+                                val baseName = format.label ?: format.language ?: "Audio ${audioTracks.size + 1}"
+                                val display = if (suffix.isNotBlank() && !baseName.contains(aCodec, true)) {
+                                    "$baseName ($suffix)"
+                                } else {
+                                    baseName
+                                }
+                                audioTracks.add(SelectableTrack(group, trackIdx, display, selected))
+                                if (selected) {
+                                    audioInfo = suffix.ifBlank { "AUDIO" }
+                                    selectedAudioLabel = display
+                                }
+                            }
+                            C.TRACK_TYPE_VIDEO -> {
+                                if (selected) {
+                                    val fps = if (format.frameRate > 0f) " ${format.frameRate.toInt()}fps" else ""
+                                    val codecName = format.sampleMimeType?.substringAfter("/")?.uppercase() ?: ""
+                                    videoCodec = "$codecName$fps".trim()
+                                    if (format.bitrate > 0) {
+                                        bitrateInfo = String.format(Locale.US, "%.1f Mbps", format.bitrate / 1_000_000f)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                embeddedTextGroups = textGroups
-                embeddedAudioGroups = audioGroups
+                embeddedTextTracks = textTracks
+                embeddedAudioTracks = audioTracks
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -592,26 +741,41 @@ fun UnifiedMorphPlayerOverlay(
         exoPlayer.addListener(listener)
 
         onDispose {
-            cueDelayJob?.cancel()
-            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            saveCurrentVodProgress()
+            clearPendingCueJobs()
+            activity?.window?.let { w ->
+                w.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                // Restore system auto-brightness override when player closes
+                val lp = w.attributes
+                if (lp.screenBrightness != WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE) {
+                    lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                    w.attributes = lp
+                }
+            }
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             exoPlayer.removeListener(listener)
             exoPlayer.release()
         }
     }
 
-
-
-    LaunchedEffect(exoPlayer, isLive) {
+    // Poll VOD progress ONLY while playing + persist resume point periodically every ~5s
+    LaunchedEffect(exoPlayer, isLive, isPlaying, item.id) {
         if (isLive) return@LaunchedEffect
-        while (true) {
-            currentPosMs = exoPlayer.currentPosition.coerceAtLeast(0L)
-            if (exoPlayer.duration > 0) durationMs = exoPlayer.duration
+        var ticks = 0
+        while (isPlaying) {
+            val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
+            val dur = exoPlayer.duration
+            currentPosMs = pos
+            if (dur > 0L) durationMs = dur
+            ticks++
+            if (ticks % 10 == 0 && dur > 0L) {
+                latestOnSaveProgress(item.id, pos, dur)
+            }
             delay(450)
         }
     }
 
-    LaunchedEffect(controlsVisible, isPlaying, isMiniPlayer) {
+    LaunchedEffect(controlsVisible, isPlaying, isMiniPlayer, controlsInteractionStamp) {
         if (controlsVisible && isPlaying && !isMiniPlayer) {
             delay(4000)
             controlsVisible = false
@@ -746,7 +910,7 @@ fun UnifiedMorphPlayerOverlay(
                     LiveFeedBelowPlayer(
                         channel = item,
                         statsLine = statsLine,
-                        isFavorite = favoriteIds.contains(item.id),
+                        isFavorite = isCurrentItemFavorite,
                         quickChips = quickLiveChips,
                         selectedCategory = selectedLiveCategory,
                         isLoadingCategory = isLoadingLiveCategory,
@@ -772,7 +936,7 @@ fun UnifiedMorphPlayerOverlay(
                         detailInfo = vodDetailInfo,
                         episodes = vodEpisodes,
                         relatedItems = relatedVodItems,
-                        isFavorite = favoriteIds.contains(item.id),
+                        isFavorite = isCurrentItemFavorite,
                         navBottom = navBottom,
                         onToggleFavorite = { onToggleFavorite(item) },
                         onOpenDescription = { showDescriptionSheet = true },
@@ -879,6 +1043,7 @@ fun UnifiedMorphPlayerOverlay(
 
         // LAYER 3: SINGLE PERSISTENT TEXTUREVIEW VIDEO CONTAINER (NEVER UNMOUNTS -> ZERO BLACK FLASH!)
         val videoShape = RoundedCornerShape(videoCorner)
+        val viewApplyCache = remember { PlayerViewApplyCache() }
         Box(
             modifier = Modifier
                 .offset(x = videoX, y = videoY)
@@ -899,14 +1064,26 @@ fun UnifiedMorphPlayerOverlay(
                 },
                 update = { view ->
                     if (view.player !== exoPlayer) view.player = exoPlayer
-                    view.resizeMode = if (p < 0.25f && !effectiveFullscreen && !isInPipMode) {
+                    val desiredResize = if (p < 0.25f && !effectiveFullscreen && !isInPipMode) {
                         AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     } else {
                         resizeModes[resizeModeIndex].first
                     }
-                    view.subtitleView?.alpha = if (useEmbeddedDelayOverlay) 0f else 1f
+                    if (viewApplyCache.resizeMode != desiredResize) {
+                        viewApplyCache.resizeMode = desiredResize
+                        view.resizeMode = desiredResize
+                    }
+                    val desiredSubAlpha = if (useEmbeddedDelayOverlay) 0f else 1f
+                    if (viewApplyCache.subAlpha != desiredSubAlpha) {
+                        viewApplyCache.subAlpha = desiredSubAlpha
+                        view.subtitleView?.alpha = desiredSubAlpha
+                    }
                     val baseSp = if (effectiveFullscreen) 18f else 14f
-                    view.subtitleView?.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, baseSp * subtitleFontScale)
+                    val desiredSubSp = baseSp * subtitleFontScale
+                    if (viewApplyCache.subTextSp != desiredSubSp) {
+                        viewApplyCache.subTextSp = desiredSubSp
+                        view.subtitleView?.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, desiredSubSp)
+                    }
                 },
                 onRelease = { it.player = null },
                 modifier = Modifier.fillMaxSize()
@@ -937,22 +1114,6 @@ fun UnifiedMorphPlayerOverlay(
                     strokeWidth = 2.6.dp,
                     modifier = Modifier.size(if (effectiveFullscreen) 40.dp else 32.dp).align(Alignment.Center)
                 )
-            }
-
-            if (p > 0.7f) {
-                errorText?.let { err ->
-                    PlayerErrorCard(
-                        err = err,
-                        onRetry = {
-                            errorText = null
-                            isBuffering = true
-                            exoPlayer.prepare()
-                            exoPlayer.playWhenReady = true
-                        },
-                        onOpenExternal = { onOpenExternal(item) },
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
             }
 
             // Double-tap ±10s burst pill
@@ -1014,19 +1175,22 @@ fun UnifiedMorphPlayerOverlay(
                         .fillMaxSize()
                         .pointerInput(Unit) {
                             detectTapGestures(
-                                onTap = { controlsVisible = !controlsVisible },
+                                onTap = {
+                                    controlsVisible = !controlsVisible
+                                    controlsInteractionStamp++
+                                },
                                 onDoubleTap = { pos ->
                                     if (!isLiveState) {
                                         if (pos.x < size.width * 0.4f) {
-                                            exoPlayer.seekTo((exoPlayer.currentPosition - 10_000L).coerceAtLeast(0L))
+                                            seekBy(-10_000L)
                                             seekBurstText = "-10s"
                                             seekBurstStamp++
                                         } else if (pos.x > size.width * 0.6f) {
-                                            exoPlayer.seekTo(exoPlayer.currentPosition + 10_000L)
+                                            seekBy(10_000L)
                                             seekBurstText = "+10s"
                                             seekBurstStamp++
                                         } else {
-                                            if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                            togglePlayPause()
                                         }
                                     }
                                 }
@@ -1105,15 +1269,18 @@ fun UnifiedMorphPlayerOverlay(
                         .size(width = screenW, height = expandedVideoH)
                         .pointerInput(Unit) {
                             detectTapGestures(
-                                onTap = { controlsVisible = !controlsVisible },
+                                onTap = {
+                                    controlsVisible = !controlsVisible
+                                    controlsInteractionStamp++
+                                },
                                 onDoubleTap = { pos ->
                                     if (!isLiveState) {
                                         if (pos.x < size.width * 0.4f) {
-                                            exoPlayer.seekTo((exoPlayer.currentPosition - 10_000L).coerceAtLeast(0L))
+                                            seekBy(-10_000L)
                                             seekBurstText = "-10s"
                                             seekBurstStamp++
                                         } else if (pos.x > size.width * 0.6f) {
-                                            exoPlayer.seekTo(exoPlayer.currentPosition + 10_000L)
+                                            seekBy(10_000L)
                                             seekBurstText = "+10s"
                                             seekBurstStamp++
                                         }
@@ -1227,7 +1394,7 @@ fun UnifiedMorphPlayerOverlay(
                             .graphicsLayer { alpha = miniChromeAlpha },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play() }) {
+                        IconButton(onClick = { togglePlayPause() }) {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                                 contentDescription = "Play/Pause",
@@ -1248,8 +1415,8 @@ fun UnifiedMorphPlayerOverlay(
             }
         }
 
-        // LAYER 5: YOUTUBE PLAYER OVERLAY CONTROLS (Exact Icons from Screenshot!)
-        val showControls = controlsVisible && !isInPipMode && (effectiveFullscreen || (!isMiniPlayer && p > 0.92f))
+        // LAYER 5: YOUTUBE PLAYER OVERLAY CONTROLS (Hidden while error card is shown so error actions are never blocked)
+        val showControls = controlsVisible && errorText == null && !isInPipMode && (effectiveFullscreen || (!isMiniPlayer && p > 0.92f))
         androidx.compose.animation.AnimatedVisibility(
             visible = showControls,
             enter = fadeIn(tween(160)),
@@ -1354,10 +1521,11 @@ fun UnifiedMorphPlayerOverlay(
                         iconSize = 32.dp,
                         tint = if (leftEnabled) Color.White else Color.White.copy(alpha = 0.35f),
                         onClick = {
+                            controlsInteractionStamp++
                             when {
                                 isLive && prevLiveChannel != null -> onSwitchItem(prevLiveChannel)
                                 prevEpisode != null -> onPlayEpisode(prevEpisode)
-                                !isLive -> exoPlayer.seekTo((exoPlayer.currentPosition - 10_000L).coerceAtLeast(0L))
+                                !isLive -> seekBy(-10_000L)
                             }
                         }
                     )
@@ -1365,8 +1533,12 @@ fun UnifiedMorphPlayerOverlay(
                     Box(
                         modifier = Modifier
                             .size(56.dp)
-                            .livelyPress(pressedScale = 0.88f) {
-                                if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                            .livelyPress(
+                                pressedScale = 0.88f,
+                                shape = CircleShape,
+                                rippleColor = Color.White
+                            ) {
+                                togglePlayPause()
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -1390,10 +1562,11 @@ fun UnifiedMorphPlayerOverlay(
                         iconSize = 32.dp,
                         tint = if (rightEnabled) Color.White else Color.White.copy(alpha = 0.35f),
                         onClick = {
+                            controlsInteractionStamp++
                             when {
                                 isLive && nextLiveChannel != null -> onSwitchItem(nextLiveChannel)
                                 nextEpisode != null -> onPlayEpisode(nextEpisode)
-                                !isLive -> exoPlayer.seekTo(exoPlayer.currentPosition + 10_000L)
+                                !isLive -> seekBy(10_000L)
                             }
                         }
                     )
@@ -1446,7 +1619,10 @@ fun UnifiedMorphPlayerOverlay(
                         YouTubeScrubBar(
                             currentMs = currentPosMs,
                             durationMs = durationMs,
+                            onInteraction = { controlsInteractionStamp++ },
                             onSeekTo = { targetMs ->
+                                controlsInteractionStamp++
+                                clearPendingCueJobs()
                                 currentPosMs = targetMs
                                 exoPlayer.seekTo(targetMs)
                             },
@@ -1465,6 +1641,30 @@ fun UnifiedMorphPlayerOverlay(
                                 .background(YouTubeRed)
                         )
                     }
+                }
+            }
+        }
+
+        // LAYER 6: ERROR OVERLAY (Sits ABOVE Layer 4 gesture catcher so Retry / External Player are 100% clickable!)
+        if (p > 0.7f && !isInPipMode) {
+            errorText?.let { err ->
+                Box(
+                    modifier = Modifier
+                        .offset(x = videoX, y = videoY)
+                        .size(width = videoW, height = videoH),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PlayerErrorCard(
+                        err = err,
+                        onRetry = {
+                            errorText = null
+                            isBuffering = true
+                            if (isLive) exoPlayer.seekToDefaultPosition()
+                            exoPlayer.prepare()
+                            exoPlayer.playWhenReady = true
+                        },
+                        onOpenExternal = { onOpenExternal(item) }
+                    )
                 }
             }
         }
@@ -1506,20 +1706,19 @@ fun UnifiedMorphPlayerOverlay(
             resizeModes = resizeModes,
             resizeModeIndex = resizeModeIndex,
             playbackSpeed = playbackSpeed,
-            audioGroups = embeddedAudioGroups,
-            selectedAudioLabel = selectedAudioLabel,
+            audioTracks = embeddedAudioTracks,
             onDismiss = { showPlayerSettingsSheet = false },
             onSelectResizeMode = { idx -> resizeModeIndex = idx },
             onSelectSpeed = { spd ->
                 playbackSpeed = spd
                 exoPlayer.setPlaybackSpeed(spd)
             },
-            onSelectAudioTrack = { group, label ->
+            onSelectAudioTrack = { track ->
                 exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
                     .buildUpon()
-                    .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
+                    .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.trackIndex))
                     .build()
-                selectedAudioLabel = label
+                selectedAudioLabel = track.label
             },
             onOpenSubtitles = {
                 showPlayerSettingsSheet = false
@@ -1540,7 +1739,8 @@ fun UnifiedMorphPlayerOverlay(
     if (showSubtitleSheet) {
         SubtitleSettingsSheet(
             mediaTitle = item.name,
-            embeddedTextGroups = embeddedTextGroups,
+            isLive = isLive,
+            embeddedTextTracks = embeddedTextTracks,
             selectedLabel = selectedSubtitleLabel,
             fontScale = subtitleFontScale,
             delayMs = subtitleDelayMs,
@@ -1560,16 +1760,16 @@ fun UnifiedMorphPlayerOverlay(
                     .build()
                 selectedSubtitleLabel = "Off"
                 externalSubtitleUri = null
-                delayedEmbeddedText = ""
+                clearPendingCueJobs()
             },
-            onSelectEmbeddedTrack = { group, label ->
+            onSelectEmbeddedTrack = { track ->
                 exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
                     .buildUpon()
                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                    .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, 0))
+                    .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.trackIndex))
                     .build()
                 externalSubtitleUri = null
-                selectedSubtitleLabel = label
+                selectedSubtitleLabel = track.label
             },
             onDownloadAndApplyOnline = { sub ->
                 if (!isLive) {
@@ -1617,7 +1817,13 @@ private fun YouTubeCleanIconBtn(
     Box(
         modifier = Modifier
             .size(40.dp)
-            .livelyPress(pressedScale = 0.86f, depthShiftPx = 0f, onClick = onClick),
+            .livelyPress(
+                pressedScale = 0.86f,
+                depthShiftPx = 0f,
+                shape = CircleShape,
+                rippleColor = Color.White,
+                onClick = onClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -1633,11 +1839,14 @@ private fun YouTubeCleanIconBtn(
 private fun YouTubeScrubBar(
     currentMs: Long,
     durationMs: Long,
+    onInteraction: () -> Unit = {},
     onSeekTo: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val safeDuration = durationMs.coerceAtLeast(1L)
     var draggingFrac by remember { mutableStateOf<Float?>(null) }
+    val latestOnSeekTo by rememberUpdatedState(onSeekTo)
+    val latestOnInteraction by rememberUpdatedState(onInteraction)
     val displayFrac = draggingFrac ?: (currentMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
 
     BoxWithConstraints(
@@ -1646,22 +1855,26 @@ private fun YouTubeScrubBar(
             .pointerInput(safeDuration) {
                 detectTapGestures { offset ->
                     val frac = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
-                    onSeekTo((frac * safeDuration).toLong())
+                    latestOnInteraction()
+                    latestOnSeekTo((frac * safeDuration).toLong())
                 }
             }
             .pointerInput(safeDuration) {
                 detectHorizontalDragGestures(
                     onDragStart = { offset ->
+                        latestOnInteraction()
                         val frac = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
                         draggingFrac = frac
                     },
                     onDragEnd = {
-                        draggingFrac?.let { f -> onSeekTo((f * safeDuration).toLong()) }
+                        latestOnInteraction()
+                        draggingFrac?.let { f -> latestOnSeekTo((f * safeDuration).toLong()) }
                         draggingFrac = null
                     },
                     onDragCancel = { draggingFrac = null },
                     onHorizontalDrag = { change, _ ->
                         change.consume()
+                        latestOnInteraction()
                         val frac = (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
                         draggingFrac = frac
                     }
@@ -1783,15 +1996,21 @@ private fun LiveFeedBelowPlayer(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        val headerCtx = LocalContext.current
+                        val channelLogoReq = remember(channel.posterUrl) {
+                            channel.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                                ImageRequest.Builder(headerCtx).data(url).size(120, 120).build()
+                            }
+                        }
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(RoundedCornerShape(6.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (!channel.posterUrl.isNullOrBlank()) {
+                            if (channelLogoReq != null) {
                                 AsyncImage(
-                                    model = channel.posterUrl,
+                                    model = channelLogoReq,
                                     contentDescription = channel.name,
                                     contentScale = ContentScale.Fit,
                                     modifier = Modifier.fillMaxSize().padding(4.dp)
@@ -1803,8 +2022,12 @@ private fun LiveFeedBelowPlayer(
 
                         Box(
                             modifier = Modifier
-                                .livelyPress(pressedScale = 0.93f, onClick = onToggleFavorite)
-                                .clip(CircleShape)
+                                .livelyPress(
+                                    pressedScale = 0.93f,
+                                    shape = CircleShape,
+                                    rippleColor = MatteGlassTokens.CanvasWhite,
+                                    onClick = onToggleFavorite
+                                )
                                 .background(MatteGlassTokens.CharcoalPrimary)
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
@@ -2028,8 +2251,12 @@ private fun VodContentBelowPlayer(
                     item {
                         Box(
                             modifier = Modifier
-                                .livelyPress(pressedScale = 0.93f, onClick = onToggleFavorite)
-                                .clip(CircleShape)
+                                .livelyPress(
+                                    pressedScale = 0.93f,
+                                    shape = CircleShape,
+                                    rippleColor = MatteGlassTokens.CanvasWhite,
+                                    onClick = onToggleFavorite
+                                )
                                 .background(MatteGlassTokens.CharcoalPrimary)
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
@@ -2145,14 +2372,13 @@ private fun VodContentBelowPlayer(
                 }
             }
 
-            items(visibleEpisodes, key = { "vod_ep_${it.id}" }) { ep ->
+            itemsIndexed(visibleEpisodes, key = { idx, ep -> "vod_ep_${idx}_${ep.id}" }) { _, ep ->
                 val playingThis = ep.id == currentEpId
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 4.dp)
-                        .livelyPress(pressedScale = 0.975f) { onPlayEpisode(ep) }
-                        .clip(RoundedCornerShape(12.dp))
+                        .livelyPress(pressedScale = 0.975f, shape = RoundedCornerShape(12.dp)) { onPlayEpisode(ep) }
                         .background(if (playingThis) MatteGlassTokens.FieldGlassBg else MatteGlassTokens.CardGlassBg)
                         .border(
                             0.9.dp,
@@ -2199,12 +2425,17 @@ private fun VodContentBelowPlayer(
                 )
             }
             items(relatedItems.take(24), key = { "rel_${it.id}" }) { rel ->
+                val relCtx = LocalContext.current
+                val relThumbReq = remember(rel.posterUrl) {
+                    rel.posterUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                        ImageRequest.Builder(relCtx).data(url).size(144, 198).build()
+                    }
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 4.dp)
-                        .livelyPress(pressedScale = 0.975f) { onSelectRelated(rel) }
-                        .clip(RoundedCornerShape(12.dp))
+                        .livelyPress(pressedScale = 0.975f, shape = RoundedCornerShape(12.dp)) { onSelectRelated(rel) }
                         .background(MatteGlassTokens.CardGlassBg)
                         .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(12.dp))
                         .padding(8.dp),
@@ -2216,9 +2447,9 @@ private fun VodContentBelowPlayer(
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(0xFF1D222C))
                     ) {
-                        if (!rel.posterUrl.isNullOrBlank()) {
+                        if (relThumbReq != null) {
                             AsyncImage(
-                                model = rel.posterUrl,
+                                model = relThumbReq,
                                 contentDescription = rel.name,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
@@ -2255,12 +2486,11 @@ private fun PlayerSettingsSheet(
     resizeModes: List<Pair<Int, String>>,
     resizeModeIndex: Int,
     playbackSpeed: Float,
-    audioGroups: List<Tracks.Group>,
-    selectedAudioLabel: String,
+    audioTracks: List<SelectableTrack>,
     onDismiss: () -> Unit,
     onSelectResizeMode: (Int) -> Unit,
     onSelectSpeed: (Float) -> Unit,
-    onSelectAudioTrack: (Tracks.Group, String) -> Unit,
+    onSelectAudioTrack: (SelectableTrack) -> Unit,
     onOpenSubtitles: () -> Unit,
     onEnterPip: () -> Unit,
     onOpenExternal: () -> Unit
@@ -2359,7 +2589,7 @@ private fun PlayerSettingsSheet(
             }
 
             // Audio Tracks
-            if (audioGroups.size > 1) {
+            if (audioTracks.size > 1) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2370,22 +2600,21 @@ private fun PlayerSettingsSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text("Audio Track", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
-                    audioGroups.forEachIndexed { idx, group ->
-                        val fmt = group.getTrackFormat(0)
-                        val label = fmt.label ?: fmt.language ?: "Audio ${idx + 1}"
-                        val active = label == selectedAudioLabel
+                    audioTracks.forEach { track ->
+                        val active = track.isSelected
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .livelyPress(pressedScale = 0.97f) { onSelectAudioTrack(group, label) }
-                                .clip(RoundedCornerShape(10.dp))
+                                .livelyPress(pressedScale = 0.97f, shape = RoundedCornerShape(10.dp)) {
+                                    onSelectAudioTrack(track)
+                                }
                                 .background(if (active) MatteGlassTokens.FieldGlassBg else MatteGlassTokens.SubtleSurface)
                                 .border(0.8.dp, if (active) SolidColor(MatteGlassTokens.CharcoalPrimary) else MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(10.dp))
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(label, fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal, color = MatteGlassTokens.CharcoalPrimary)
+                            Text(track.label, fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal, color = MatteGlassTokens.CharcoalPrimary)
                             if (active) Icon(Icons.Default.Check, null, tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(16.dp))
                         }
                     }
@@ -2510,13 +2739,16 @@ private fun LiveCategoryPickerSheet(
                 modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                items(filtered, key = { it }) { cat ->
+                itemsIndexed(filtered, key = { idx, cat -> "${idx}_$cat" }) { _, cat ->
                     val active = cat == selectedCategory
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .livelyPress(pressedScale = 0.975f) { onSelectCategory(cat) }
-                            .clip(RoundedCornerShape(12.dp))
+                            .livelyPress(
+                                pressedScale = 0.975f,
+                                shape = RoundedCornerShape(12.dp),
+                                rippleColor = if (active) MatteGlassTokens.CanvasWhite else Color.Unspecified
+                            ) { onSelectCategory(cat) }
                             .background(if (active) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.CardGlassBg)
                             .border(
                                 0.8.dp,
@@ -2735,7 +2967,8 @@ private fun YouTubeChannelFeedCard(
 @Composable
 private fun SubtitleSettingsSheet(
     mediaTitle: String,
-    embeddedTextGroups: List<Tracks.Group>,
+    isLive: Boolean,
+    embeddedTextTracks: List<SelectableTrack>,
     selectedLabel: String,
     fontScale: Float,
     delayMs: Long,
@@ -2743,7 +2976,7 @@ private fun SubtitleSettingsSheet(
     onDismiss: () -> Unit,
     onPickLocal: () -> Unit,
     onSelectOff: () -> Unit,
-    onSelectEmbeddedTrack: (Tracks.Group, String) -> Unit,
+    onSelectEmbeddedTrack: (SelectableTrack) -> Unit,
     onDownloadAndApplyOnline: (OnlineSubtitleResult) -> Unit,
     onSaveAndDone: (Float, Long) -> Unit
 ) {
@@ -2755,6 +2988,7 @@ private fun SubtitleSettingsSheet(
     var searchQuery by remember(mediaTitle) { mutableStateOf(mediaTitle) }
     var subLang by remember { mutableStateOf("eng") }
     var subResults by remember { mutableStateOf<List<OnlineSubtitleResult>>(emptyList()) }
+    var searchFeedback by remember { mutableStateOf<String?>(null) }
     var searching by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
@@ -2939,118 +3173,140 @@ private fun SubtitleSettingsSheet(
                     }
                 }
 
-                if (embeddedTextGroups.isNotEmpty()) {
-                    embeddedTextGroups.forEachIndexed { idx, group ->
-                        val fmt = group.getTrackFormat(0)
-                        val trackLabel = fmt.label ?: fmt.language ?: "Track ${idx + 1}"
-                        val active = trackLabel == selectedLabel
+                if (embeddedTextTracks.isNotEmpty()) {
+                    embeddedTextTracks.forEach { track ->
+                        val active = !hasExternalSub && selectedLabel != "Off" && track.isSelected
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .livelyPress(pressedScale = 0.97f) { onSelectEmbeddedTrack(group, trackLabel) }
-                                .clip(RoundedCornerShape(10.dp))
+                                .livelyPress(pressedScale = 0.97f, shape = RoundedCornerShape(10.dp)) {
+                                    onSelectEmbeddedTrack(track)
+                                }
                                 .background(if (active) MatteGlassTokens.FieldGlassBg else MatteGlassTokens.SubtleSurface)
                                 .border(0.75.dp, if (active) SolidColor(MatteGlassTokens.CharcoalPrimary) else MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(10.dp))
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(trackLabel, fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal, color = MatteGlassTokens.CharcoalPrimary)
+                            Text(track.label, fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal, color = MatteGlassTokens.CharcoalPrimary)
                             if (active) Icon(Icons.Default.Check, null, tint = MatteGlassTokens.CharcoalPrimary, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MatteGlassTokens.CardGlassBg)
-                    .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text("Search Online Subtitles", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("English" to "eng", "Arabic" to "ara", "Kurdish" to "kur").forEach { (name, code) ->
-                        val selected = subLang == code
-                        Box(
-                            modifier = Modifier
-                                .livelyPress(pressedScale = 0.93f) { subLang = code }
-                                .clip(CircleShape)
-                                .background(if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.FieldGlassBg)
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                name,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (selected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalMuted
-                            )
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (!isLive) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MatteGlassTokens.CardGlassBg)
+                        .border(0.85.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(14.dp))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        singleLine = true,
-                        placeholder = { Text("Movie or show name", fontSize = 13.sp) },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .livelyPress(pressedScale = 0.92f) {
-                                scope.launch {
-                                    searching = true
-                                    subResults = try {
-                                        OnlineSubtitleService.searchSubtitles(searchQuery, subLang)
-                                    } catch (_: Exception) {
-                                        emptyList()
-                                    }
-                                    searching = false
-                                }
-                            }
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MatteGlassTokens.CharcoalPrimary),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Search, "Search", tint = MatteGlassTokens.CanvasWhite)
-                    }
-                }
-
-                if (searching) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = MatteGlassTokens.CharcoalPrimary)
-                    }
-                } else if (subResults.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        subResults.take(10).forEach { sub ->
-                            Row(
+                    Text("Search Online Subtitles", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MatteGlassTokens.CharcoalPrimary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("English" to "eng", "Arabic" to "ara", "Kurdish" to "kur").forEach { (name, code) ->
+                            val selected = subLang == code
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .livelyPress(pressedScale = 0.97f) { onDownloadAndApplyOnline(sub) }
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(MatteGlassTokens.FieldGlassBg)
-                                    .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(10.dp))
-                                    .padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .livelyPress(
+                                        pressedScale = 0.93f,
+                                        shape = CircleShape,
+                                        rippleColor = if (selected) MatteGlassTokens.CanvasWhite else Color.Unspecified
+                                    ) { subLang = code }
+                                    .background(if (selected) MatteGlassTokens.CharcoalPrimary else MatteGlassTokens.FieldGlassBg)
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(
-                                    text = "${sub.language} • ${sub.fileName}",
+                                    name,
                                     fontSize = 12.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = MatteGlassTokens.CharcoalPrimary
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (selected) MatteGlassTokens.CanvasWhite else MatteGlassTokens.CharcoalMuted
                                 )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            placeholder = { Text("Movie or show name", fontSize = 13.sp) },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .livelyPress(
+                                    pressedScale = 0.92f,
+                                    shape = RoundedCornerShape(12.dp),
+                                    rippleColor = MatteGlassTokens.CanvasWhite
+                                ) {
+                                    scope.launch {
+                                        searching = true
+                                        searchFeedback = null
+                                        when (val outcome = OnlineSubtitleService.searchSubtitles(searchQuery, subLang)) {
+                                            is SubtitleSearchOutcome.Success -> {
+                                                subResults = outcome.results
+                                                if (outcome.results.isEmpty()) {
+                                                    searchFeedback = "No subtitles found for \"$searchQuery\"."
+                                                }
+                                            }
+                                            is SubtitleSearchOutcome.Error -> {
+                                                subResults = emptyList()
+                                                searchFeedback = outcome.message
+                                            }
+                                        }
+                                        searching = false
+                                    }
+                                }
+                                .background(MatteGlassTokens.CharcoalPrimary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Search, "Search", tint = MatteGlassTokens.CanvasWhite)
+                        }
+                    }
+
+                    if (searching) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = MatteGlassTokens.CharcoalPrimary)
+                        }
+                    } else if (searchFeedback != null) {
+                        Text(
+                            text = searchFeedback.orEmpty(),
+                            fontSize = 12.sp,
+                            color = MatteGlassTokens.CharcoalMuted
+                        )
+                    } else if (subResults.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            subResults.take(10).forEach { sub ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .livelyPress(pressedScale = 0.97f, shape = RoundedCornerShape(10.dp)) {
+                                            onDownloadAndApplyOnline(sub)
+                                        }
+                                        .background(MatteGlassTokens.FieldGlassBg)
+                                        .border(0.75.dp, MatteGlassTokens.SpecularBorderBrush, RoundedCornerShape(10.dp))
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${sub.language} • ${sub.fileName}",
+                                        fontSize = 12.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = MatteGlassTokens.CharcoalPrimary
+                                    )
+                                }
                             }
                         }
                     }
@@ -3061,8 +3317,11 @@ private fun SubtitleSettingsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .livelyPress(pressedScale = 0.965f) { onSaveAndDone(draftScale, draftDelayMs) }
-                    .clip(RoundedCornerShape(12.dp))
+                    .livelyPress(
+                        pressedScale = 0.965f,
+                        shape = RoundedCornerShape(12.dp),
+                        rippleColor = MatteGlassTokens.CanvasWhite
+                    ) { onSaveAndDone(draftScale, draftDelayMs) }
                     .background(MatteGlassTokens.CharcoalPrimary),
                 contentAlignment = Alignment.Center
             ) {

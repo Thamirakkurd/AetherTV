@@ -37,10 +37,8 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.aethertv.v2.data.MediaItem
 import com.aethertv.v2.ui.components.UnifiedMediaTopBar
-import com.aethertv.v2.ui.theme.LocalHazeState
 import com.aethertv.v2.ui.theme.MatteGlassTokens
 import com.aethertv.v2.ui.theme.livelyPress
-import dev.chrisbanes.haze.hazeSource
 
 private val ChannelRowShape = RoundedCornerShape(12.dp)
 private val ChannelLogoShape = RoundedCornerShape(8.dp)
@@ -64,7 +62,6 @@ fun LiveTvScreen(
     onMoreClick: (MediaItem) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val hazeState = LocalHazeState.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
@@ -72,7 +69,6 @@ fun LiveTvScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (hazeState != null) Modifier.hazeSource(hazeState) else Modifier)
                 .background(MatteGlassTokens.AmbientCanvasBrush)
         ) {
             if (items.isEmpty() && !isLoading) {
@@ -124,10 +120,13 @@ fun LiveTvScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .livelyPress(pressedScale = 0.978f, depthShiftPx = 2.5f) {
+                                .livelyPress(
+                                    pressedScale = 0.978f,
+                                    depthShiftPx = 2.5f,
+                                    shape = ChannelRowShape
+                                ) {
                                     onPlayClick(channel)
                                 }
-                                .clip(ChannelRowShape)
                                 .background(MatteGlassTokens.CardGlassBg)
                                 .border(1.1.dp, MatteGlassTokens.SpecularBorderBrush, ChannelRowShape)
                                 .padding(start = 10.dp, end = 4.dp, top = 9.dp, bottom = 9.dp),
