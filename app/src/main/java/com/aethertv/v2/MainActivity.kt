@@ -552,7 +552,7 @@ private fun AetherV2App(
                                 favoritesCount = viewModel.favorites.size,
                                 recentCount = viewModel.recents.size,
                                 extraBottomPadding = miniPlayerExtraPadding,
-                                onChangeThemeMode = { viewModel.setThemeMode(it) },
+                                onChangeThemeMode = { viewModel.updateThemeMode(it) },
                                 onSelectServer = { viewModel.selectServer(it) },
                                 onDeleteServer = { viewModel.deleteServer(it) },
                                 onAddServerClick = { showAddDialog = true },
@@ -562,7 +562,7 @@ private fun AetherV2App(
                                         viewModel.refreshActivePlaylist()
                                     }
                                 },
-                                onChangeDownloadMode = { viewModel.setDownloadMode(it) },
+                                onChangeDownloadMode = { viewModel.updateDownloadMode(it) },
                                 onPlayDownloadedFile = { entry ->
                                     val offlineItem = MediaItem(
                                         id = "offline_${entry.displayName}",

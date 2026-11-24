@@ -280,12 +280,12 @@ class AetherViewModel(application: Application) : AndroidViewModel(application) 
         statusMessage = null
     }
 
-    fun setThemeMode(mode: AppThemeMode) {
+    fun updateThemeMode(mode: AppThemeMode) {
         themeMode = mode
         prefs.edit().putString("theme_mode", mode.name).apply()
     }
 
-    fun setDownloadMode(mode: DownloadMode) {
+    fun updateDownloadMode(mode: DownloadMode) {
         downloadMode = mode
         prefs.edit().putString("download_mode", mode.name).apply()
     }
